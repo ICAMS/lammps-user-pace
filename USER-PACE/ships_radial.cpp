@@ -384,5 +384,3 @@ void SHIPsRadialFunctions::evaluate_pair(DOUBLE_TYPE r,
     dcr *= 0.5;
 }
 
-
-

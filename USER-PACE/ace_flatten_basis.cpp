@@ -128,5 +128,3 @@ void ACEFlattenBasisSet::_copy_dynamic_memory(const ACEFlattenBasisSet &src) { /
     }
 }
 
-
-
