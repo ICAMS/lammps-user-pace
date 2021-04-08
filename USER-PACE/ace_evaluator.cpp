@@ -658,3 +658,4 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 #endif
     per_atom_calc_timer.stop();
 }
+

@@ -1338,3 +1338,4 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
 #endif
     per_atom_calc_timer.stop();
 }
+

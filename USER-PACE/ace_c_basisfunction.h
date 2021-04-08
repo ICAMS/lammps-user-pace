@@ -249,3 +249,4 @@ struct ACECTildeBasisFunction : public ACEAbstractBasisFunction {
 };
 
 #endif //ACE_C_BASISFUNCTION_H
+

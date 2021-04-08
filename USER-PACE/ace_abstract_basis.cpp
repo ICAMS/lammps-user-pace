@@ -182,3 +182,4 @@ SPECIES_TYPE ACEAbstractBasisSet::get_species_index_by_name(const string &elemna
     }
     return -1;
 }
+

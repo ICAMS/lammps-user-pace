@@ -7,7 +7,7 @@
 1. Clone the repository using `https://github.com/ICAMS/lammps-user-pace.git` or download the zip files from [here](https://github.com/ICAMS/lammps-user-pace/archive/main.zip).
 2. copy `USER-PACE` directory from the cloned repository into `lammps/src` folder.
 3. Include `USER-PACE` in the compilation by running `make yes-user-pace` from the `lammps/src` folder.
-4. Compile lammps as usual, i.e. `make serial` or `make mpi`
+4. Compile lammps as usual, i.e. `make serial` or `make mpi`.
 
 ### Build with `cmake`
 
