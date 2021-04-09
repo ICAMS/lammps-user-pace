@@ -521,8 +521,16 @@ void ACECTildeBasisSet::load(const string filename) {
         throw invalid_argument("Could not open file " + filename);
 
     //read number of elements
-    res = fscanf(fptr, " nelements=");
-    res = fscanf(fptr, "%s", buffer);
+    res = fscanf(fptr, " nelements=%s\n", buffer);
+    //try to read the buffer one more time
+    char *rr;
+    while (res != 1) {
+        rr = fgets(buffer, 1024, fptr);
+        if (!rr)
+            break;
+        res = fscanf(fptr, " nelements=%s\n", buffer);
+    }
+
     if (res != 1)
         throw_error(filename, "nelements", "nelements=[number]");
     nelements = stoi_err(buffer, filename, "nelements", "nelements=[number]");

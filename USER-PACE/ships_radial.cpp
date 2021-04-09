@@ -226,29 +226,29 @@ void SHIPsRadialFunctions::fread(FILE *fptr){
     this->radbasis.fread(fptr);
 
     // read the pair potential 
-    if (haspair == 't') { 
-        this->haspair=true;
-        fscanf(fptr, "begin repulsive potential\n");
-        fscanf(fptr, "begin polypairpot\n");
+    if (haspair == 't') {
+        this->haspair = true;
+        res = fscanf(fptr, "begin repulsive potential\n");
+        res = fscanf(fptr, "begin polypairpot\n");
         // read the basis parameters
         pairbasis.fread(fptr);
         maxn = pairbasis.get_maxn();
         // read the coefficients 
-        fscanf(fptr, "coefficients\n");
+        res = fscanf(fptr, "coefficients\n");
         paircoeffs.resize(maxn);
         for (size_t n = 0; n < maxn; n++) {
-            fscanf(fptr, "%lf\n", &c);
+            res = fscanf(fptr, "%lf\n", &c);
             paircoeffs(n) = c;
         }
-        fscanf(fptr, "end polypairpot\n");
+        res = fscanf(fptr, "end polypairpot\n");
         // read the spline parameters 
-        fscanf(fptr, "spline parameters\n"); 
-        fscanf(fptr, "   e_0 + B  exp(-A*(r/ri-1)) * (ri/r)\n");
-        fscanf(fptr, "ri=%lf\n", &(this->ri));
-        fscanf(fptr, "e0=%lf\n", &(this->e0));
-        fscanf(fptr, "A=%lf\n", &(this->A));
-        fscanf(fptr, "B=%lf\n", &(this->B));
-        fscanf(fptr, "end repulsive potential\n");
+        res = fscanf(fptr, "spline parameters\n");
+        res = fscanf(fptr, "   e_0 + B  exp(-A*(r/ri-1)) * (ri/r)\n");
+        res = fscanf(fptr, "ri=%lf\n", &(this->ri));
+        res = fscanf(fptr, "e0=%lf\n", &(this->e0));
+        res = fscanf(fptr, "A=%lf\n", &(this->A));
+        res = fscanf(fptr, "B=%lf\n", &(this->B));
+        res = fscanf(fptr, "end repulsive potential\n");
     }
 }
 
