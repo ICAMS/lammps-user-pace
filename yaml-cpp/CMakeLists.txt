@@ -1,6 +1,6 @@
 # 3.5 is actually available almost everywhere, but this a good minimum
 cmake_minimum_required(VERSION 3.4)
-project(YAML_CPP VERSION 0.6.3 LANGUAGES CXX)
+project(YAML_CPP_PACE VERSION 0.6.3 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
@@ -60,17 +60,17 @@ set(msvc-rt-mt-dll $<STREQUAL:${msvc-rt},MultiThreadedDLL>)
 
 set(backport-msvc-runtime $<VERSION_LESS:${CMAKE_VERSION},3.15>)
 
-add_library(yaml-cpp ${yaml-cpp-type} "")
-add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp)
+add_library(yaml-cpp-pace ${yaml-cpp-type} "")
+add_library(yaml-cpp-pace::yaml-cpp-pace ALIAS yaml-cpp-pace)
 
-set_property(TARGET yaml-cpp
+set_property(TARGET yaml-cpp-pace
         PROPERTY
         MSVC_RUNTIME_LIBRARY ${CMAKE_MSVC_RUNTIME_LIBRARY})
-set_property(TARGET yaml-cpp
+set_property(TARGET yaml-cpp-pace
         PROPERTY
         CXX_STANDARD_REQUIRED ON)
 
-target_include_directories(yaml-cpp
+target_include_directories(yaml-cpp-pace
         PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -78,12 +78,12 @@ target_include_directories(yaml-cpp
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 
 if (NOT DEFINED CMAKE_CXX_STANDARD)
-    set_target_properties(yaml-cpp
+    set_target_properties(yaml-cpp-pace
             PROPERTIES
             CXX_STANDARD 11)
 endif ()
 
-target_compile_options(yaml-cpp
+target_compile_options(yaml-cpp-pace
         PRIVATE
         $<${not-msvc}:-Wall -Wextra -Wshadow -Weffc++ -Wno-long-long>
         $<${not-msvc}:-pedantic -pedantic-errors>
@@ -99,12 +99,12 @@ target_compile_options(yaml-cpp
         # http://msdn.microsoft.com/en-us/library/3c594ae3.aspx
         $<$<CXX_COMPILER_ID:MSVC>:/W3 /wd4127 /wd4355>)
 
-target_compile_definitions(yaml-cpp
+target_compile_definitions(yaml-cpp-pace
         PRIVATE
         $<${build-windows-dll}:${PROJECT_NAME}_DLL>
         $<$<NOT:$<BOOL:${YAML_CPP_BUILD_CONTRIB}>>:YAML_CPP_NO_CONTRIB>)
 
-target_sources(yaml-cpp
+target_sources(yaml-cpp-pace
         PRIVATE
         $<$<BOOL:${YAML_CPP_BUILD_CONTRIB}>:${yaml-cpp-contrib-sources}>
         ${yaml-cpp-sources})
@@ -113,7 +113,7 @@ if (NOT DEFINED CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX "d")
 endif ()
 
-set_target_properties(yaml-cpp PROPERTIES
+set_target_properties(yaml-cpp-pace PROPERTIES
         VERSION "${PROJECT_VERSION}"
         SOVERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
         PROJECT_LABEL "yaml-cpp ${yaml-cpp-label-postfix}"
