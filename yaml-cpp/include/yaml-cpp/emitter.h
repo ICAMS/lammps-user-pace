@@ -22,13 +22,13 @@
 #include "yaml-cpp/null.h"
 #include "yaml-cpp/ostream_wrapper.h"
 
-namespace YAML {
+namespace YAML_PACE {
     class Binary;
 
     struct _Null;
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     class EmitterState;
 
     class YAML_CPP_API Emitter {

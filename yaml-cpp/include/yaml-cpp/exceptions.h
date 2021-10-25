@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <string>
 
-namespace YAML {
+namespace YAML_PACE {
 // error messages
     namespace ErrorMsg {
         const char *const YAML_DIRECTIVE_ARGS =

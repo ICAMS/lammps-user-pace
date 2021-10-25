@@ -8,7 +8,7 @@
 #include "yaml-cpp/node/node.h"
 #include "yaml-cpp/parser.h"
 
-namespace YAML {
+namespace YAML_PACE {
     Node Load(const std::string &input) {
         std::stringstream stream(input);
         return Load(stream);

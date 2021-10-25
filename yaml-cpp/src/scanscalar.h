@@ -12,7 +12,7 @@
 #include "regex_yaml.h"
 #include "stream.h"
 
-namespace YAML {
+namespace YAML_PACE {
     enum CHOMP {
         STRIP = -1, CLIP, KEEP
     };

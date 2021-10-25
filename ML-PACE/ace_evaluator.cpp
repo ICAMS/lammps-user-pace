@@ -462,15 +462,21 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
     basis_set->inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
     basis_set->FS_values_and_derivatives(rhos, evdwl, dF_drho, mu_i);
-
+#ifdef DEBUG_ENERGY_CALCULATIONS
+    printf("ACE = %f, rho_core = %f, fcut=%f\n",evdwl, rho_core, fcut);
+#endif
     dF_drho_core = evdwl * dfcut + 1;
     for (DENSITY_TYPE p = 0; p < ndensity; ++p)
         dF_drho(p) *= fcut;
     evdwl_cut = evdwl * fcut + rho_core;
-
+#ifdef DEBUG_ENERGY_CALCULATIONS
+    printf("ACE_cut = %f\n",evdwl_cut);
+#endif
     // E0 shift 
     evdwl_cut += basis_set->E0vals(mu_i);
-
+#ifdef DEBUG_ENERGY_CALCULATIONS
+    printf("E_total(+E0) = %f\n",evdwl_cut);
+#endif
 #ifdef DEBUG_FORCES_CALCULATIONS
     printf("dFrhos = ");
     for(DENSITY_TYPE p =0; p<ndensity; ++p) printf(" %f ",dF_drho(p));

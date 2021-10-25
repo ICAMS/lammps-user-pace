@@ -2,7 +2,7 @@
 #include "yaml-cpp/node/detail/node.h"  // IWYU pragma: keep
 #include "yaml-cpp/node/ptr.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
 
         void memory_holder::merge(memory_holder &rhs) {

@@ -10,7 +10,7 @@
 #include "yaml-cpp/node/ptr.h"
 #include "yaml-cpp/node/type.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         std::atomic<size_t> node::m_amount{0};
 

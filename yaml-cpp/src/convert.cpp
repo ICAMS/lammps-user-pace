@@ -43,7 +43,7 @@ namespace {
     }
 }  // namespace
 
-namespace YAML {
+namespace YAML_PACE {
     bool convert<bool>::decode(const Node &node, bool &rhs) {
         if (!node.IsScalar())
             return false;

@@ -14,14 +14,14 @@
 #include "yaml-cpp/eventhandler.h"
 #include "yaml-cpp/node/ptr.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         class node;
     }  // namespace detail
     struct Mark;
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     class Node;
 
     class NodeBuilder : public EventHandler {

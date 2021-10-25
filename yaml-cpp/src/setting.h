@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace YAML {
+namespace YAML_PACE {
 
     class SettingChangeBase {
     public:

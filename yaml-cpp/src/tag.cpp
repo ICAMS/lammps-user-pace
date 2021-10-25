@@ -5,7 +5,7 @@
 #include "tag.h"
 #include "token.h"
 
-namespace YAML {
+namespace YAML_PACE {
     Tag::Tag(const Token &token)
             : type(static_cast<TYPE>(token.data)), handle{}, value{} {
         switch (type) {

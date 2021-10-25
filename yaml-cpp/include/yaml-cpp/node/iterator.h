@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         struct iterator_value : public Node, std::pair<Node, Node> {
             iterator_value() = default;

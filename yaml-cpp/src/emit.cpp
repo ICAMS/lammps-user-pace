@@ -3,7 +3,7 @@
 #include "yaml-cpp/emitfromevents.h"
 #include "yaml-cpp/emitter.h"
 
-namespace YAML {
+namespace YAML_PACE {
     Emitter &operator<<(Emitter &out, const Node &node) {
         EmitFromEvents emitFromEvents(out);
         NodeEvents events(node);

@@ -4,11 +4,11 @@
 #include "stream.h"
 #include "yaml-cpp/exceptions.h"  // IWYU pragma: keep
 
-namespace YAML {
+namespace YAML_PACE {
     struct Mark;
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     namespace Exp {
         unsigned ParseHex(const std::string &str, const Mark &mark) {
             unsigned value = 0;

@@ -1,6 +1,6 @@
 #include "yaml-cpp/null.h"
 
-namespace YAML {
+namespace YAML_PACE {
     _Null Null;
 
     bool IsNullString(const std::string &str) {

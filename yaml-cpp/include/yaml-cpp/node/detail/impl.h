@@ -11,7 +11,7 @@
 #include "yaml-cpp/node/detail/node_data.h"
 #include <type_traits>
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         template<typename Key, typename Enable = void>
         struct get_idx {

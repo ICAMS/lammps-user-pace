@@ -6,7 +6,7 @@
 #include "yaml-cpp/node/node.h"
 #include "yaml-cpp/node/type.h"
 
-namespace YAML {
+namespace YAML_PACE {
     void NodeEvents::AliasManager::RegisterReference(const detail::node &node) {
         m_anchorByIdentity.insert(std::make_pair(node.ref(), _CreateNewAnchor()));
     }

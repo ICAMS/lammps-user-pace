@@ -11,7 +11,7 @@
 
 #define CP_REPLACEMENT_CHARACTER (0xFFFD)
 
-namespace YAML {
+namespace YAML_PACE {
     enum UtfIntroState {
         uis_start,
         uis_utfbe_b1,

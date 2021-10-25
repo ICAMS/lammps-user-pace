@@ -11,7 +11,7 @@
 #include "stream.h"
 #include <cstddef>
 
-namespace YAML {
+namespace YAML_PACE {
 
     class StreamCharSource {
     public:

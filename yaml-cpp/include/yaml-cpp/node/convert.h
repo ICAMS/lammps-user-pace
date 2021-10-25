@@ -24,7 +24,7 @@
 #include "yaml-cpp/null.h"
 
 
-namespace YAML {
+namespace YAML_PACE {
     class Binary;
 
     struct _Null;
@@ -32,7 +32,7 @@ namespace YAML {
     struct convert;
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     namespace conversion {
         inline bool IsInfinity(const std::string &input) {
             return input == ".inf" || input == ".Inf" || input == ".INF" ||

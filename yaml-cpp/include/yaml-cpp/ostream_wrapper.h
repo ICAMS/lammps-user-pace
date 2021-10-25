@@ -12,7 +12,7 @@
 
 #include "yaml-cpp/dll.h"
 
-namespace YAML {
+namespace YAML_PACE {
     class YAML_CPP_API ostream_wrapper {
     public:
         ostream_wrapper();

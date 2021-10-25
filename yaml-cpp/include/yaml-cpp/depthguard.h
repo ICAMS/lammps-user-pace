@@ -9,7 +9,7 @@
 
 #include "exceptions.h"
 
-namespace YAML {
+namespace YAML_PACE {
 
 /**
  * @brief The DeepRecursion class

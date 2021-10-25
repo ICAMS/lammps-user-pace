@@ -17,13 +17,13 @@
 #include "yaml-cpp/emitterstyle.h"
 #include "yaml-cpp/eventhandler.h"
 
-namespace YAML {
+namespace YAML_PACE {
     class GraphBuilderInterface;
 
     struct Mark;
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     class GraphBuilderAdapter : public EventHandler {
     public:
         GraphBuilderAdapter(GraphBuilderInterface &builder)

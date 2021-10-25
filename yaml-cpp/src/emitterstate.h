@@ -17,7 +17,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace YAML {
+namespace YAML_PACE {
     struct FmtScope {
         enum value {
             Local, Global

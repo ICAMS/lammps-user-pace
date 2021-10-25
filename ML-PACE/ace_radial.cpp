@@ -182,7 +182,7 @@ ACERadialFunctions::radbase(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcut, 
             chebPow(lam, cut, dcut, r);
         } else if (radbasename == "ChebLinear") {
             chebLinear(lam, cut, dcut, r);
-        } else if (radbasename == "TEST_SBessel") {
+        } else if (radbasename == "TEST_SBessel" || radbasename == "SBessel") {
             simplified_bessel(cut, r);
         } else if (radbasename.rfind("TEST_", 0) == 0) {
             test_zero_func(lam, cut, dcut, r);

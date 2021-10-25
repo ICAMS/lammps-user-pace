@@ -12,7 +12,7 @@
 
 #include "yaml-cpp/dll.h"
 
-namespace YAML {
+namespace YAML_PACE {
     YAML_CPP_API std::string EncodeBase64(const unsigned char *data,
                                           std::size_t size);
 

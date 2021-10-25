@@ -13,7 +13,7 @@
 
 #include "yaml-cpp/anchor.h"
 
-namespace YAML {
+namespace YAML_PACE {
     class CollectionStack;
 
     template<int>

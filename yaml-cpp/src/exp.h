@@ -13,7 +13,7 @@
 #include "regex_yaml.h"
 #include "stream.h"
 
-namespace YAML {
+namespace YAML_PACE {
 ////////////////////////////////////////////////////////////////////////////////
 // Here we store a bunch of expressions for matching different parts of the
 // file.

@@ -6,7 +6,7 @@
 #include "token.h"
 #include "yaml-cpp/exceptions.h"  // IWYU pragma: keep
 
-namespace YAML {
+namespace YAML_PACE {
     Scanner::Scanner(std::istream &in)
             : INPUT(in),
               m_tokens{},

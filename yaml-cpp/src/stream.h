@@ -15,7 +15,7 @@
 #include <set>
 #include <string>
 
-namespace YAML {
+namespace YAML_PACE {
 
     class StreamCharSource;
 

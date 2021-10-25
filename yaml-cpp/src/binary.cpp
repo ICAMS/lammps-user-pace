@@ -2,7 +2,7 @@
 
 #include <cctype>
 
-namespace YAML {
+namespace YAML_PACE {
     static const char encoding[] =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 

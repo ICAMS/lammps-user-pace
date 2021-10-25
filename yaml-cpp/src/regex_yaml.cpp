@@ -1,6 +1,6 @@
 #include "regex_yaml.h"
 
-namespace YAML {
+namespace YAML_PACE {
 // constructors
 
     RegEx::RegEx(REGEX_OP op) : m_op(op), m_a(0), m_z(0), m_params{} {}

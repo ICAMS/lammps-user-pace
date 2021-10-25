@@ -1,6 +1,6 @@
 #include "yaml-cpp/depthguard.h"
 
-namespace YAML {
+namespace YAML_PACE {
 
     DeepRecursion::DeepRecursion(int depth, const Mark &mark_,
                                  const std::string &msg_)

@@ -12,7 +12,7 @@
 #include <memory>
 #include <vector>
 
-namespace YAML {
+namespace YAML_PACE {
 
 // TODO: This class is no longer needed
     template<typename T>

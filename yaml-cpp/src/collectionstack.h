@@ -10,7 +10,7 @@
 #include <cassert>
 #include <stack>
 
-namespace YAML {
+namespace YAML_PACE {
     struct CollectionType {
         enum value {
             NoCollection, BlockMap, BlockSeq, FlowMap, FlowSeq, CompactMap

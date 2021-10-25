@@ -11,7 +11,7 @@
 #include "streamcharsource.h"
 #include "stringsource.h"
 
-namespace YAML {
+namespace YAML_PACE {
 // query matches
     inline bool RegEx::Matches(char ch) const {
         std::string str;

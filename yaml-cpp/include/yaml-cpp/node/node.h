@@ -17,7 +17,7 @@
 #include "yaml-cpp/node/ptr.h"
 #include "yaml-cpp/node/type.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         class node;
 
@@ -27,7 +27,7 @@ namespace YAML {
     }  // namespace detail
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     class YAML_CPP_API Node {
     public:
         friend class NodeBuilder;
@@ -48,8 +48,8 @@ namespace YAML {
         friend
         struct as_if;
 
-        using iterator = YAML::iterator;
-        using const_iterator = YAML::const_iterator;
+        using iterator = YAML_PACE::iterator;
+        using const_iterator = YAML_PACE::const_iterator;
 
         Node();
 
@@ -64,7 +64,7 @@ namespace YAML {
 
         ~Node();
 
-        YAML::Mark Mark() const;
+        YAML_PACE::Mark Mark() const;
 
         NodeType::value Type() const;
 

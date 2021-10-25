@@ -1,7 +1,7 @@
 #include "yaml-cpp/exceptions.h"
 #include "yaml-cpp/noexcept.h"
 
-namespace YAML {
+namespace YAML_PACE {
 
 // These destructors are defined out-of-line so the vtable is only emitted once.
     Exception::~Exception() YAML_CPP_NOEXCEPT = default;

@@ -11,7 +11,7 @@
 #include "yaml-cpp/null.h"
 #include "yaml-cpp/ostream_wrapper.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace Utils {
         namespace {
             enum {

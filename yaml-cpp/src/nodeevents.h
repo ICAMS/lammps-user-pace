@@ -13,13 +13,13 @@
 #include "yaml-cpp/anchor.h"
 #include "yaml-cpp/node/ptr.h"
 
-namespace YAML {
+namespace YAML_PACE {
     namespace detail {
         class node;
     }  // namespace detail
 }  // namespace YAML
 
-namespace YAML {
+namespace YAML_PACE {
     class EventHandler;
 
     class Node;
