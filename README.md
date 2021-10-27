@@ -2,33 +2,42 @@
 
 ## Installation:
 
+Before the multispecies PACE will be merged into main branch of the official LAMMPS repository, you could get the unofficial version of LAMMPS from [here](https://github.com/yury-lysogorskiy/lammps)
+
 ### Build with `make`
 
-1. Clone the repository using `https://github.com/ICAMS/lammps-user-pace.git` or download the zip files from [here](https://github.com/ICAMS/lammps-user-pace/archive/main.zip).
-2. copy `USER-PACE` directory from the cloned repository into `lammps/src` folder.
-3. Include `USER-PACE` in the compilation by running `make yes-user-pace` from the `lammps/src` folder.
+Follow LAMMPS installation instructions
+
+1. Go to `lammps/src` folder
+2. Compile the ML-PACE library by running `make lib-pace args="-b"`
+3. Include `ML-PACE` in the compilation by running `make yes-ml-pace`
 4. Compile lammps as usual, i.e. `make serial` or `make mpi`.
 
 ### Build with `cmake`
 
-1. Clone the repository using `https://github.com/ICAMS/lammps-user-pace.git` or download the zip files from [here](https://github.com/ICAMS/lammps-user-pace/archive/main.zip).
-2. copy `USER-PACE` directory from the cloned repository into `lammps/src` folder.
-3. Build LAMMPS using:
-   ```
-   cd lammps
-   mkdir build
-   cd build
-   cmake -DCMAKE_BUILD_TYPE=Release -DPKG_USER-PACE=ON ../cmake 
-   make
-   ```
-   Other configuration flags could be added, i.e. for **MPI** support"
-   ```
-   cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_MPI=ON -DPKG_USER-PACE=ON ../cmake
-   ```
+
+1. Create build directory and go there with 
+
+```
+cd lammps
+mkdir build
+cd build
+```
+
+2. Configure the lammps build with
+
+```
+cmake -DCMAKE_BUILD_TYPE=Release -DPKG_USER-PACE=ON ../cmake 
+```
+
+or 
+
+```
+cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_MPI=ON -DPKG_USER-PACE=ON ../cmake
+```
+
+For more information see [here](https://lammps.sandia.gov/doc/Build_cmake.html).
+
    
-   For more information see [here](https://lammps.sandia.gov/doc/Build_cmake.html).
-
-### Install using `conda`
-
-LAMMPS package can be installed using conda by `conda install -c conda-forge lammps`. This distribution includes the `USER-PACE` package.
+3. Build LAMMPS using `cmake --build .` or `make`
 
