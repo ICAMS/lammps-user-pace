@@ -27,13 +27,13 @@ cd build
 2. Configure the lammps build with
 
 ```
-cmake -DCMAKE_BUILD_TYPE=Release -DPKG_USER-PACE=ON ../cmake 
+cmake -DCMAKE_BUILD_TYPE=Release -DPKG_ML-PACE=ON ../cmake 
 ```
 
 or 
 
 ```
-cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_MPI=ON -DPKG_USER-PACE=ON ../cmake
+cmake -DCMAKE_BUILD_TYPE=Release -D BUILD_MPI=ON -DPKG_ML-PACE=ON ../cmake
 ```
 
 For more information see [here](https://lammps.sandia.gov/doc/Build_cmake.html).
