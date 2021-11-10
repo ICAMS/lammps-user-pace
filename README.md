@@ -2,7 +2,7 @@
 
 ## Installation:
 
-Before the multispecies PACE will be merged into main branch of the official LAMMPS repository, you could get the unofficial version of LAMMPS from [here](https://github.com/yury-lysogorskiy/lammps)
+You could get the supported version of LAMMPS from [GitHub repository](https://github.com/lammps/lammps)
 
 ### Build with `make`
 
