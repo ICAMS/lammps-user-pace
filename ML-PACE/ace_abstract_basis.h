@@ -287,13 +287,13 @@ public:
      * Copy dynamic memory from src. Must be override and extended in derived classes!
      * @param src source object to copy from
      */
-    virtual void _copy_dynamic_memory(const ACEAbstractBasisSet &src);
+    void _copy_dynamic_memory(const ACEAbstractBasisSet &src);
 
     /**
      * Copy scalar values from src. Must be override and extended in derived classes!
      * @param src source object to copy from
      */
-    virtual void _copy_scalar_memory(const ACEAbstractBasisSet &src);
+    void _copy_scalar_memory(const ACEAbstractBasisSet &src);
 
     virtual vector<DOUBLE_TYPE> get_all_coeffs() const = 0;
 
