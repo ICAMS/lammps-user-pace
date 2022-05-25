@@ -231,8 +231,8 @@ ACERadialFunctions::chebExpCos(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcu
         gr(n - 1) = 0.5 - 0.5 * cheb(n - 1);
         dgr(n - 1) = -0.5 * dcheb(n - 1) * dx;
     }
-    env = 0.5 * (1.0 + cos(M_PI * r / cut));
-    denv = -0.5 * sin(M_PI * r / cut) * M_PI / cut;
+    env = 0.5 * (1.0 + cos(pi * r / cut));
+    denv = -0.5 * sin(pi * r / cut) * pi / cut;
     for (NS_TYPE n = 0; n < nradbase; n++) {
         dgr(n) = gr(n) * denv + dgr(n) * env;
         gr(n) = gr(n) * env;
@@ -240,8 +240,8 @@ ACERadialFunctions::chebExpCos(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcu
     // for radtype = 3 a smooth cut is already included in the basis function
     dx = cut - dcut;
     if (r > dx) {
-        fcut = 0.5 * (1.0 + cos(M_PI * (r - dx) / dcut));
-        dfcut = -0.5 * sin(M_PI * (r - dx) / dcut) * M_PI / dcut;
+        fcut = 0.5 * (1.0 + cos(pi * (r - dx) / dcut));
+        dfcut = -0.5 * sin(pi * (r - dx) / dcut) * pi / dcut;
         for (NS_TYPE n = 0; n < nradbase; n++) {
             dgr(n) = gr(n) * dfcut + dgr(n) * fcut;
             gr(n) = gr(n) * fcut;
@@ -325,8 +325,8 @@ DOUBLE_TYPE dsinc(DOUBLE_TYPE x) {
  * @return
  */
 DOUBLE_TYPE fn(DOUBLE_TYPE x, DOUBLE_TYPE rc, int n) {
-    return pow(-1, n) * sqrt(2) * M_PI / pow(rc, 1.5) * (n + 1) * (n + 2) / sqrt(sqr(n + 1) + sqr(n + 2)) *
-           (sinc(x * (n + 1) * M_PI / rc) + sinc(x * (n + 2) * M_PI / rc));
+    return pow(-1, n) * sqrt(2) * pi / pow(rc, 1.5) * (n + 1) * (n + 2) / sqrt(sqr(n + 1) + sqr(n + 2)) *
+           (sinc(x * (n + 1) * pi / rc) + sinc(x * (n + 2) * pi / rc));
 }
 
 /**
@@ -337,9 +337,9 @@ DOUBLE_TYPE fn(DOUBLE_TYPE x, DOUBLE_TYPE rc, int n) {
  * @return
  */
 DOUBLE_TYPE dfn(DOUBLE_TYPE x, DOUBLE_TYPE rc, int n) {
-    return pow(-1, n) * sqrt(2) * M_PI / pow(rc, 1.5) * (n + 1) * (n + 2) / sqrt(sqr(n + 1) + sqr(n + 2)) *
-           (dsinc(x * (n + 1) * M_PI / rc) * (n + 1) * M_PI / rc +
-            dsinc(x * (n + 2) * M_PI / rc) * (n + 2) * M_PI / rc);
+    return pow(-1, n) * sqrt(2) * pi / pow(rc, 1.5) * (n + 1) * (n + 2) / sqrt(sqr(n + 1) + sqr(n + 2)) *
+           (dsinc(x * (n + 1) * pi / rc) * (n + 1) * pi / rc +
+            dsinc(x * (n + 2) * pi / rc) * (n + 2) * pi / rc);
 }
 
 /**
