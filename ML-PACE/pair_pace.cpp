@@ -173,7 +173,7 @@ void PairPACE::compute(int eflag, int vflag) {
 
 
     //determine the maximum number of neighbours
-    int max_jnum = -1;
+    int max_jnum = 0;
     int nei = 0;
     for (ii = 0; ii < list->inum; ii++) {
         i = ilist[ii];
