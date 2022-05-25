@@ -156,13 +156,6 @@ void PairPACE::compute(int eflag, int vflag) {
     // the pointer to the list of neighbors of "i"
     firstneigh = list->firstneigh;
 
-    if (inum != nlocal) {
-        char str[128];
-        snprintf(str, 128, "inum: %d nlocal: %d are different", inum, nlocal);
-        error->all(FLERR, str);
-    }
-
-
     // Aidan Thompson told RD (26 July 2019) that practically always holds:
     // inum = nlocal
     // i = ilist(ii) < inum
@@ -322,24 +315,17 @@ void PairPACE::coeff(int narg, char **arg) {
     //number of provided elements in pair_coeff line
     int ntypes_coeff = narg - 3;
 
-    if (ntypes_coeff != atom->ntypes) {
-        char error_message[1024];
-        snprintf(error_message, 1024,
-                 "Incorrect args for pair coefficients. You provided %d elements in pair_coeff, but structure has %d atom types",
-                 ntypes_coeff, atom->ntypes);
-        error->all(FLERR, error_message);
-    }
-
     char *type1 = arg[0];
     char *type2 = arg[1];
     char *potential_file_name = arg[2];
     char **elemtypes = &arg[3];
 
-    // insure I,J args are * *
-
-    if (strcmp(type1, "*") != 0 || strcmp(type2, "*") != 0)
-        error->all(FLERR, "Incorrect args for pair coefficients");
-
+    // insure that I,J are identical
+    if (strcmp(type1, type2) != 0)
+        error->all(FLERR, "Incorrect args for PACE:pair_coeff coefficients");
+    int ilo, ihi, jlo, jhi;
+    force->bounds(FLERR, type1, atom->ntypes, ilo, ihi);
+    force->bounds(FLERR, type2, atom->ntypes, jlo, jhi);
 
     //load potential file
     basis_set = new ACECTildeBasisSet();
@@ -372,9 +358,15 @@ void PairPACE::coeff(int narg, char **arg) {
     ace = new ACERecursiveEvaluator();
     ace->set_recursive(recursive);
     ace->element_type_mapping.init(atom->ntypes + 1);
+    ace->element_type_mapping.fill(-1); //-1 means atom not included into potential
 
-    for (int i = 1; i <= atom->ntypes; i++) {
-        char *elemname = elemtypes[i - 1];
+    if (ihi - ilo + 1 != ntypes_coeff) {
+        error->all(FLERR,
+                   "Number of atom types I,J doesn't correspond to species (EleA, EleB), should be: pair_coeff I J pace pot.yace EleA EleB ...");
+    }
+
+    for (int i = ilo, ii = 0; i <= ihi; i++, ii++) {
+        char *elemname = elemtypes[ii];
         int atomic_number = AtomicNumberByName_pace(elemname);
         if (atomic_number == -1) {
             char error_msg[1024];
@@ -399,22 +391,14 @@ void PairPACE::coeff(int narg, char **arg) {
         }
     }
 
-    // clear setflag since coeff() called once with I,J = * *
-    int n = atom->ntypes;
-    for (int i = 1; i <= n; i++) {
-        for (int j = i; j <= n; j++) {
-            setflag[i][j] = 1;
-            scale[i][j] = 1.0;
-        }
-    }
-
     // set setflag i,j for type pairs where both are mapped to elements
 
-    int count = 1;
-    for (int i = 1; i <= n; i++)
-        for (int j = i; j <= n; j++)
+    int count = 0;
+    for (int i = ilo; i <= ihi; i++)
+        for (int j = jlo; j <= jhi; j++)
             if (map[i] >= 0 && map[j] >= 0) {
                 setflag[i][j] = 1;
+                scale[i][j] = 1.0;
                 count++;
             }
 
