@@ -28,7 +28,13 @@ int generate_basis_function_n_body(RANK_TYPE rank, const NS_TYPE *ns_rad, const 
                                    bool half_basis = false) noexcept (false);
 
 int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *LS, const bool half_basis,
-                        const ACEClebschGordan &cs, list<ms_cg_pair> &ms_cs_pairs_list)  noexcept(false);
+                        const ACEClebschGordan &cs, vector<ms_cg_pair> &ms_cs_pairs_list)  noexcept(false);
+
+int generate_equivariant_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *LS,
+                                    LS_TYPE L, MS_TYPE M,
+                                    const bool half_basis,
+                                    const bool check_is_even,
+                                    const ACEClebschGordan &cs, vector<ms_cg_pair> &ms_cs_pairs_list) noexcept(false);
 
 bool validate_ls_LS(vector<LS_TYPE> ls, vector<LS_TYPE> LS);
 void expand_ls_LS(RANK_TYPE rank, vector<LS_TYPE> &ls, vector<LS_TYPE> &LS);

@@ -121,6 +121,12 @@ public:
      * 2D array to store projections of basis function for rank > 1, shape: [func_ind][ndensity]
      */
     Array2D<DOUBLE_TYPE> basis_projections = Array2D<DOUBLE_TYPE>("basis_projections");
+
+
+    /**
+     * 2D array to store projections of basis function for rank > 1, shape: [func_ind][ndensity]
+     */
+    DOUBLE_TYPE max_gamma_grade = 0;
 #endif
 };
 

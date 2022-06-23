@@ -189,7 +189,215 @@ void unpack_ms_space_point(const RANK_TYPE rank, unsigned long ms_space_ind, con
 }
 
 int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *LS, const bool half_basis,
-                        const ACEClebschGordan &cs, list<ms_cg_pair> &ms_cs_pairs_list) noexcept(false) {
+                        const ACEClebschGordan &cs, vector<ms_cg_pair> &ms_cs_pairs_list) noexcept(false) {
+    return generate_equivariant_ms_cg_list(rank,
+                                           ls, LS,
+                                           0, 0, //L=0,M=0
+                                           half_basis,
+                                           true,//check_is_even
+                                           cs, ms_cs_pairs_list
+    );
+}
+
+int generate_basis_function_n_body(const RANK_TYPE rank, const NS_TYPE *ns_rad, const LS_TYPE *ls, const LS_TYPE *LS,
+                                   ACEBBasisFunction &b_basis_function, const ACEClebschGordan &cs,
+                                   const bool half_basis) noexcept(false) {
+#ifdef DEBUG_COUPLING
+    cout<<"generate_basis_function_n_body"<<endl;
+    for(int i = 0; i<rank; i++)
+        cout<<ls[i]<<" ";
+    cout<<endl;
+#endif
+
+    RANK_TYPE rankL = 0;
+    if (rank > 2)
+        rankL = rank - 2; // rankL should be -2, as we count even the last node in the tree, where L = 0
+
+    vector<ms_cg_pair> ms_cs_pairs_list;
+    generate_ms_cg_list(rank, ls, LS, half_basis, cs, ms_cs_pairs_list);
+
+#ifdef DEBUG_COUPLING
+    cout<<endl <<ms_cs_pairs_list.size() << " (ms,cs) pairs in a list"<<endl;
+#endif
+
+    auto pairs_count = static_cast<SHORT_INT_TYPE>(ms_cs_pairs_list.size());
+    int i;
+
+    b_basis_function.rank = rank;
+    b_basis_function.mus = new SPECIES_TYPE[rank]{0};
+    b_basis_function.rankL = rankL;
+    b_basis_function.ls = new LS_TYPE[rank];
+    for (RANK_TYPE j = 0; j < rank; j++)
+        b_basis_function.ls[j] = ls[j];
+
+    b_basis_function.ns = new NS_TYPE[rank];
+    for (RANK_TYPE j = 0; j < rank; j++)
+        b_basis_function.ns[j] = ns_rad[j];
+
+    b_basis_function.LS = new LS_TYPE[rankL];
+    for (RANK_TYPE j = 0; j < rankL; j++)
+        b_basis_function.LS[j] = LS[j];
+
+    b_basis_function.is_half_ms_basis = half_basis;
+    if (ms_cs_pairs_list.empty()) {
+        return -1;
+    }
+    b_basis_function.num_ms_combs = pairs_count;
+
+    b_basis_function.ms_combs = new MS_TYPE[rank * b_basis_function.num_ms_combs];
+    b_basis_function.gen_cgs = new DOUBLE_TYPE[b_basis_function.num_ms_combs];
+
+    vector<ms_cg_pair>::iterator ms_cg_pair_iterator;
+
+    for (ms_cg_pair_iterator = ms_cs_pairs_list.begin(), i = 0;
+         ms_cg_pair_iterator != ms_cs_pairs_list.end(); ++ms_cg_pair_iterator, i++) {
+        for (RANK_TYPE r = 0; r < rank; r++)
+            b_basis_function.ms_combs[i * rank + r] = (*ms_cg_pair_iterator).ms[r];
+
+        b_basis_function.gen_cgs[i] = (*ms_cg_pair_iterator).c;
+
+    }
+#ifdef DEBUG_COUPLING
+    printf("rank=%d, rankL = %d, num_ms_combs=%d\n", b_basis_function.rank, b_basis_function.rankL, b_basis_function.num_ms_combs);
+#endif
+
+    return 1;
+}
+
+
+ACECouplingTreesCache::ACECouplingTreesCache(const RANK_TYPE rank_max) {
+    this->rank_max = rank_max;
+    coupling_trees_vector.resize(rank_max + 1);
+    for (RANK_TYPE r = 1; r <= rank_max; r++) {
+        coupling_trees_vector[r] = ACECouplingTree(r);
+    }
+}
+
+ACECouplingTree::ACECouplingTree(RANK_TYPE rank) {
+    if (rank > 0) {
+        this->rank = rank;
+        this->tree_map_size = 3 * (rank - 1);
+        tree_indices_array.resize(this->tree_map_size);
+        initialize_coupling_tree();
+    } else if (rank == 0) {
+        this->rank = rank;
+        this->tree_map_size = 0;
+        tree_indices_array.resize(this->tree_map_size);
+    }
+}
+
+void ACECouplingTree::initialize_coupling_tree() {
+    this->tree_indices_array = generate_coupling_tree(rank);
+}
+
+bool validate_ls_LS(vector<LS_TYPE> ls, vector<LS_TYPE> LS) {
+    int rank = ls.size();
+    int rankL = LS.size();
+    if (rank <= 2) {
+        if (rankL != 0) {
+            stringstream s;
+            s << "len of LS should be " << 0 << ", but " << rankL << " is found";
+            throw std::invalid_argument(s.str());
+            //return false;
+        }
+    } else if (rank > 2)
+        if (rankL != rank - 2) {
+            stringstream s;
+            s << "len of LS should be " << rank - 2 << ", but " << rankL << " is found";
+            throw std::invalid_argument(s.str());
+            //return false;
+        }
+
+    //validation according to ls-LS relations
+    if (rank == 1) {
+        if (ls.at(0) != 0) { //ls[0]==0
+            stringstream s;
+            s << "ls(";
+            for (auto l_val: ls) s << " " << l_val << " ";
+            s << ") should be (0)";
+            throw std::invalid_argument(s.str());
+        }
+    } else if (rank == 2) {// ls[1]==ls[0]
+        if (ls.at(0) != ls.at(1)) {
+            stringstream s;
+            s << "All elements of ls (";
+            for (auto l_val: ls) s << " " << l_val << " ";
+            s << ") should be equal";
+            throw std::invalid_argument(s.str());
+        }
+    } else if (rank == 3 || rank == 5) { //L(-1) = l(-1)
+        if (LS[LS.size() - 1] != ls[ls.size() - 1]) {
+            stringstream s;
+            s << "Last element of LS (";
+            for (auto lint_val: LS) s << " " << lint_val << " ";
+            s << ") != last element of ls (";
+            for (auto ls_val: ls) s << " " << ls_val << " ";
+            s << ")";
+            throw std::invalid_argument(s.str());
+            //return false;
+        }
+    } else if (rank >= 4) {//L(-1) = L(-2)
+        if (LS[LS.size() - 1] != LS[LS.size() - 2]) {
+            stringstream s;
+            s << "Last element of LS (";
+            for (auto lint_val: LS) s << " " << lint_val << " ";
+            s << ") != to its next-to-last element";
+            throw std::invalid_argument(s.str());
+            //return false;
+        }
+    }
+
+    int sum_of_ls = 0;
+    for (auto l: ls)
+        sum_of_ls += l;
+
+    if (sum_of_ls % 2 != 0) {
+        stringstream s;
+        s << "Sum of ls is not even: ";
+        s << "ls = (";
+        for (RANK_TYPE i = 0; i < rank; i++) s << ls[i] << " ";
+        s << ")";
+        throw std::invalid_argument(s.str());
+        //return false;
+    }
+
+    return true;
+}
+
+void expand_ls_LS(RANK_TYPE rank, vector<LS_TYPE> &ls, vector<LS_TYPE> &LS) {// expand ls and LS from symmetry relations
+    if (rank == 1) { //ls[0]==0
+        if (ls.empty())
+            ls.emplace_back(0);
+    } else if (rank == 2) { // ls[1]==ls[0]
+        if (ls.size() == 1)
+            ls.emplace_back(ls.at(0));
+    } else if (rank == 3) { //       //L(-1) = l(-1)
+        if (LS.empty() and ls.size() == rank)
+            LS.emplace_back(ls.at(2)); // LS[0] ==LS[-1] == ls[2]==ls[-1]
+    } else if (rank == 4) {
+        if (LS.size() == 1)
+            LS.emplace_back(LS.at(0)); // LS[1]==LS[0]
+    } else if (rank == 5) {
+        if (LS.size() == rank - 3 and ls.size() == rank)
+            LS.emplace_back(ls.at(4)); // LS[0] ==LS[-1] == ls[2]==ls[-1]
+    } else if (rank == 6) { // LS[-1]==LS[-2]
+        if (LS.size() == rank - 3 and ls.size() == rank)
+            LS.emplace_back(LS.at(LS.size() - 1));
+    }
+}
+
+///////////////// Equivariant coupling
+int generate_equivariant_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *LS,
+                                    LS_TYPE L, MS_TYPE M,
+                                    const bool half_basis,
+                                    const bool check_is_even,
+                                    const ACEClebschGordan &cs, vector<ms_cg_pair> &ms_cs_pairs_list) noexcept(false) {
+    if (abs(M) > L) {
+        stringstream s;
+        s << "Should be |M|<L, but get L=" << L << ", M=" << M;
+        throw invalid_argument(s.str());
+    }
+
     RANK_TYPE rankL = 0;
     if (rank > 2)
         rankL = rank - 2;
@@ -199,7 +407,11 @@ int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *
         lsLS[i] = ls[i];
         sum_of_ls += ls[i];
     }
-    if (sum_of_ls % 2 != 0) {
+
+    ms_cs_pairs_list.clear();
+
+
+    if (check_is_even && sum_of_ls % 2 != 0) {
         stringstream s;
         s << "sum of ls is not even ";
         s << "ls = (";
@@ -212,7 +424,7 @@ int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *
         lsLS[i] = LS[i - rank];
         sum_of_ls += lsLS[i];
     }
-    lsLS[2 * rank - 2] = 0; // last L = 0
+    lsLS[2 * rank - 2] = L; // last L = L
 
     auto tree_indices_array = generate_coupling_tree(rank);
 
@@ -243,9 +455,9 @@ int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *
             sum_of_ms += ms[j];
 
         // if sum not equal to 0, then the combination is not rotational-invariant, skip it
-        if (sum_of_ms != 0) {
+        if (sum_of_ms != M) {
 #ifdef DEBUG_COUPLING
-            cout<<"sum_of_ms!=0, skip"<<endl;
+            cout<<"sum_of_ms != target M="<<M<<", skip"<<endl;
 #endif
             continue;
         }
@@ -340,191 +552,4 @@ int generate_ms_cg_list(const RANK_TYPE rank, const LS_TYPE *ls, const LS_TYPE *
         ms_cs_pairs_list.push_back(mcs_pair);
     }// END LOOP OVER M-SPACE
     return 0;
-}
-
-int generate_basis_function_n_body(const RANK_TYPE rank, const NS_TYPE *ns_rad, const LS_TYPE *ls, const LS_TYPE *LS,
-                                   ACEBBasisFunction &b_basis_function, const ACEClebschGordan &cs,
-                                   const bool half_basis) noexcept (false){
-#ifdef DEBUG_COUPLING
-    cout<<"generate_basis_function_n_body"<<endl;
-    for(int i = 0; i<rank; i++)
-        cout<<ls[i]<<" ";
-    cout<<endl;
-#endif
-
-    RANK_TYPE rankL = 0;
-    if (rank > 2)
-        rankL = rank - 2; // rankL should be -2, as we count even the last node in the tree, where L = 0
-
-    list<ms_cg_pair> ms_cs_pairs_list;
-    generate_ms_cg_list(rank, ls, LS, half_basis, cs, ms_cs_pairs_list);
-
-#ifdef DEBUG_COUPLING
-    cout<<endl <<ms_cs_pairs_list.size() << " (ms,cs) pairs in a list"<<endl;
-#endif
-
-    auto pairs_count = static_cast<SHORT_INT_TYPE>(ms_cs_pairs_list.size());
-    int i;
-
-    b_basis_function.rank = rank;
-    b_basis_function.mus = new SPECIES_TYPE[rank]{0};
-    b_basis_function.rankL = rankL;
-    b_basis_function.ls = new LS_TYPE[rank];
-    for (RANK_TYPE j = 0; j < rank; j++)
-        b_basis_function.ls[j] = ls[j];
-
-    b_basis_function.ns = new NS_TYPE[rank];
-    for (RANK_TYPE j = 0; j < rank; j++)
-        b_basis_function.ns[j] = ns_rad[j];
-
-    b_basis_function.LS = new LS_TYPE[rankL];
-    for (RANK_TYPE j = 0; j < rankL; j++)
-        b_basis_function.LS[j] = LS[j];
-
-    b_basis_function.is_half_ms_basis = half_basis;
-    if (ms_cs_pairs_list.empty()) {
-        return -1;
-    }
-    b_basis_function.num_ms_combs = pairs_count;
-
-    b_basis_function.ms_combs = new MS_TYPE[rank * b_basis_function.num_ms_combs];
-    b_basis_function.gen_cgs = new DOUBLE_TYPE[b_basis_function.num_ms_combs];
-
-    list<ms_cg_pair>::iterator ms_cg_pair_iterator;
-
-    for (ms_cg_pair_iterator = ms_cs_pairs_list.begin(), i = 0;
-         ms_cg_pair_iterator != ms_cs_pairs_list.end(); ++ms_cg_pair_iterator, i++) {
-        for (RANK_TYPE r = 0; r < rank; r++)
-            b_basis_function.ms_combs[i * rank + r] = (*ms_cg_pair_iterator).ms[r];
-
-        b_basis_function.gen_cgs[i] = (*ms_cg_pair_iterator).c;
-
-    }
-#ifdef DEBUG_COUPLING
-    printf("rank=%d, rankL = %d, num_ms_combs=%d\n", b_basis_function.rank, b_basis_function.rankL, b_basis_function.num_ms_combs);
-#endif
-
-    return 1;
-}
-
-
-ACECouplingTreesCache::ACECouplingTreesCache(const RANK_TYPE rank_max) {
-    this->rank_max = rank_max;
-    coupling_trees_vector.resize(rank_max + 1);
-    for (RANK_TYPE r = 1; r <= rank_max; r++) {
-        coupling_trees_vector[r] = ACECouplingTree(r);
-    }
-}
-
-ACECouplingTree::ACECouplingTree(RANK_TYPE rank) {
-    if (rank > 0) {
-        this->rank = rank;
-        this->tree_map_size = 3 * (rank - 1);
-        tree_indices_array.resize(this->tree_map_size);
-        initialize_coupling_tree();
-    } else if (rank == 0) {
-        this->rank = rank;
-        this->tree_map_size = 0;
-        tree_indices_array.resize(this->tree_map_size);
-    }
-}
-
-void ACECouplingTree::initialize_coupling_tree() {
-    this->tree_indices_array = generate_coupling_tree(rank);
-}
-
-bool validate_ls_LS(vector<LS_TYPE> ls, vector<LS_TYPE> LS) {
-    int rank = ls.size();
-    int rankL = LS.size();
-    if (rank <= 2) {
-        if (rankL != 0) {
-            stringstream s;
-            s << "len of LS should be " << 0 << ", but " << rankL << " is found";
-            throw std::invalid_argument(s.str());
-            //return false;
-        }
-    } else if (rank > 2)
-        if (rankL != rank - 2) {
-            stringstream s;
-            s << "len of LS should be " << rank - 2 << ", but " << rankL << " is found";
-            throw std::invalid_argument(s.str());
-            //return false;
-        }
-
-    //validation according to ls-LS relations
-    if(rank==1) {
-        if (ls.at(0)!=0) { //ls[0]==0
-            stringstream s;
-            s << "ls(";
-            for (auto l_val: ls) s << " " << l_val << " ";
-            s << ") should be (0)";
-            throw std::invalid_argument(s.str());
-        }
-    } else if (rank==2) {// ls[1]==ls[0]
-        if (ls.at(0)!=ls.at(1)) {
-            stringstream s;
-            s << "All elements of ls (";
-            for (auto l_val: ls) s << " " << l_val << " ";
-            s << ") should be equal";
-            throw std::invalid_argument(s.str());
-        }
-    } else if (rank == 3 || rank == 5) { //L(-1) = l(-1)
-        if (LS[LS.size() - 1] != ls[ls.size() - 1]) {
-            stringstream s;
-            s << "Last element of LS (";
-            for (auto lint_val: LS) s << " " << lint_val << " ";
-            s << ") != last element of ls (";
-            for (auto ls_val: ls) s << " " << ls_val << " ";
-            s << ")";
-            throw std::invalid_argument(s.str());
-            //return false;
-        }
-    } else if (rank >= 4) {//L(-1) = L(-2)
-        if (LS[LS.size() - 1] != LS[LS.size() - 2]) {
-            stringstream s;
-            s << "Last element of LS (";
-            for (auto lint_val: LS) s << " " << lint_val << " ";
-            s << ") != to its next-to-last element";
-            throw std::invalid_argument(s.str());
-            //return false;
-        }
-    }
-
-    int sum_of_ls = 0;
-    for (auto l: ls)
-        sum_of_ls += l;
-
-    if (sum_of_ls % 2 != 0) {
-        stringstream s;
-        s << "Sum of ls is not even: ";
-        s << "ls = (";
-        for (RANK_TYPE i = 0; i < rank; i++) s << ls[i] << " ";
-        s << ")";
-        throw std::invalid_argument(s.str());
-        //return false;
-    }
-
-    return true;
-}
-
-void expand_ls_LS(RANK_TYPE rank, vector<LS_TYPE> &ls, vector<LS_TYPE> &LS)  {// expand ls and LS from symmetry relations
-    if (rank==1) { //ls[0]==0
-        if(ls.empty())
-            ls.emplace_back(0);
-    } else if (rank==2) { // ls[1]==ls[0]
-        if(ls.size() == 1)
-            ls.emplace_back(ls.at(0));
-    } else if (rank==3) { //       //L(-1) = l(-1)
-        if(LS.empty() and ls.size() == rank)
-            LS.emplace_back(ls.at(2)); // LS[0] ==LS[-1] == ls[2]==ls[-1]
-    } else if (rank==4)  {
-        if(LS.size() == 1)
-            LS.emplace_back(LS.at(0)); // LS[1]==LS[0]
-    } else if (rank==5) {
-        if(LS.size() == rank - 3  and ls.size() == rank)
-            LS.emplace_back(ls.at(4)); // LS[0] ==LS[-1] == ls[2]==ls[-1]
-    } else if (rank==6) { // LS[-1]==LS[-2]
-        if(LS.size() == rank - 3 and ls.size() == rank)
-            LS.emplace_back(LS.at(LS.size() - 1));
-    }
 }
