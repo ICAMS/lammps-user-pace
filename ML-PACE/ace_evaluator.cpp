@@ -184,6 +184,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         mu_i = element_type_mapping(type[i]);
     else
         mu_i = type[i];
+    if (mu_i == -1) throw std::invalid_argument("Central atom  species type = -1. Stopping");
 
     const SHORT_INT_TYPE total_basis_size_rank1 = basis_set->total_basis_size_rank1[mu_i];
     const SHORT_INT_TYPE total_basis_size = basis_set->total_basis_size[mu_i];
@@ -250,7 +251,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             mu_j = element_type_mapping(type_j);
         else
             mu_j = type_j;
-
+        if (mu_j == -1) throw std::invalid_argument("Neighbour atom species type = -1. Stopping");
         DOUBLE_TYPE current_cutoff = basis_set->radial_functions->cut(mu_i, mu_j);
         r_xyz = sqrt(xn * xn + yn * yn + zn * zn);
 

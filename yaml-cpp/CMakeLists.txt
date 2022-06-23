@@ -2,6 +2,13 @@
 cmake_minimum_required(VERSION 3.4)
 project(YAML_CPP_PACE VERSION 0.6.3 LANGUAGES CXX)
 
+# set policy to honor set variables that match option() commands
+# this allows CMake scripts that include this file as a subproject
+# to enforce option variable settings.
+if(POLICY CMP0077)
+  cmake_policy(SET CMP0077 NEW)
+endif()
+
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
 include(CheckCXXCompilerFlag)
