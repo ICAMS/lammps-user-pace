@@ -93,7 +93,8 @@ endif ()
 target_compile_options(yaml-cpp-pace
         PRIVATE
         $<${not-msvc}:-Wall -Wextra -Wshadow -Weffc++ -Wno-long-long>
-        $<${not-msvc}:-pedantic -pedantic-errors>
+        # The options below cause problems with nvcc "compiler"
+        # $<${not-msvc}:-pedantic -pedantic-errors>
 
         $<$<AND:${backport-msvc-runtime},${msvc-rt-mtd-static}>:-MTd>
         $<$<AND:${backport-msvc-runtime},${msvc-rt-mt-static}>:-MT>
