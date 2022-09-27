@@ -51,7 +51,8 @@ class ACEBEvaluator : public ACEEvaluator {
 
     void resize_projections();
 
-    void validate_ASI_square_shape(SPECIES_TYPE st, const vector<size_t>& shape);
+    void validate_ASI_square_shape(SPECIES_TYPE st, const vector<size_t> &shape);
+
     void validate_ASI_shape(const string &element_name, SPECIES_TYPE st, const vector<size_t> &shape);
 
 public:
@@ -80,9 +81,11 @@ public:
 
     void resize_neighbours_cache(int max_jnum) override;
 
-    void load_active_set(const string &asi_filename, bool is_linear = true, bool is_auto_determine=true);
+    void load_active_set(const string &asi_filename, bool is_linear = true, bool is_auto_determine = true);
 
     void set_active_set(const vector<vector<vector<DOUBLE_TYPE>>> &species_type_active_set_inv);
+
+    bool get_is_linear_extrapolation_grade() { return this->is_linear_extrapolation_grade; }
 };
 
 
