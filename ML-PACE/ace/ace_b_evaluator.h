@@ -46,9 +46,14 @@ class ACEBEvaluator : public ACEEvaluator {
 
     // active sets
     map<SPECIES_TYPE, Array2D<DOUBLE_TYPE>> A_active_set_inv;
-    Array1D<DOUBLE_TYPE> projections;
+
+    bool is_linear_extrapolation_grade = true;
 
     void resize_projections();
+
+    void validate_ASI_square_shape(SPECIES_TYPE st, const vector<size_t>& shape);
+    void validate_ASI_shape(const string &element_name, SPECIES_TYPE st, const vector<size_t> &shape);
+
 public:
 
     ACEBEvaluator() = default;
@@ -57,7 +62,7 @@ public:
         set_basis(bas);
     }
 
-    explicit ACEBEvaluator(BBasisConfiguration& bBasisConfiguration) {
+    explicit ACEBEvaluator(BBasisConfiguration &bBasisConfiguration) {
         _basis_set.initialize_basis(bBasisConfiguration);
         set_basis(_basis_set);
     }
@@ -75,9 +80,10 @@ public:
 
     void resize_neighbours_cache(int max_jnum) override;
 
-    void load_active_set(const string& asi_filename);
-    void set_active_set(const vector<vector<vector<DOUBLE_TYPE>>>& species_type_active_set_inv);
+    void load_active_set(const string &asi_filename, bool is_linear = true, bool is_auto_determine=true);
+
+    void set_active_set(const vector<vector<vector<DOUBLE_TYPE>>> &species_type_active_set_inv);
 };
 
 
-#endif //ACE_ACE_H
+#endif //ACE_B_EVALUATOR_H

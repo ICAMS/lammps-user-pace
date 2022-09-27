@@ -36,8 +36,8 @@ void ACEEvaluator::init(ACEAbstractBasisSet *basis_set) {
     A.init(basis_set->nelements, basis_set->nradmax + 1, basis_set->lmax + 1, "A");
     A_rank1.init(basis_set->nelements, basis_set->nradbase, "A_rank1");
 
-    rhos.init(basis_set->ndensitymax + 1, "rhos"); // +1 density for core repulsion
-    dF_drho.init(basis_set->ndensitymax + 1, "dF_drho"); // +1 density for core repulsion
+    rhos.init(basis_set->ndensitymax , "rhos");
+    dF_drho.init(basis_set->ndensitymax , "dF_drho");
 }
 
 void ACEEvaluator::init_timers() {
@@ -216,12 +216,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     rhos.fill(0);
     dF_drho.fill(0);
 
-#ifdef EXTRA_C_PROJECTIONS
-    basis_projections_rank1.init(total_basis_size_rank1, ndensity, "c_projections_rank1");
-    basis_projections_rank1.fill(0);
-    basis_projections.init(total_basis_size, ndensity, "c_projections");
-    basis_projections.fill(0);
-#endif
+//#ifdef EXTRA_C_PROJECTIONS
+//    projections.init(total_basis_size_rank1+total_basis_size,"projections");
+//    projections.fill(0.0);
+//    dE_dc.init((total_basis_size_rank1+total_basis_size)*ndensity, "dE_dc");
+//    dE_dc.fill(0.0);
+//#endif
 
     //proxy references to spherical harmonics and radial functions arrays
     const Array2DLM<ACEComplex> &ylm = basis_set->spherical_harmonics.ylm;
@@ -346,10 +346,9 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     // ==================== ENERGY ====================
 
     energy_calc_timer.start();
-#ifdef EXTRA_C_PROJECTIONS
-    basis_projections_rank1.fill(0);
-    basis_projections.fill(0);
-#endif
+//#ifdef EXTRA_C_PROJECTIONS
+//    projections.fill(0.0);
+//#endif
 
     //ALGORITHM 2: Basis functions B with iterative product and density rho(p) calculation
     //rank=1
@@ -368,11 +367,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
             //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
             rhos(p) += func->ctildes[p] * A_cur;
-#ifdef EXTRA_C_PROJECTIONS
-            //aggregate C-projections separately
-            basis_projections_rank1(func_rank1_ind, p)+= func->ctildes[p] * A_cur;
-#endif
         }
+//#ifdef EXTRA_C_PROJECTIONS
+//        //aggregate C-projections separately
+//        // always take 0-th density, because Ctilde evalutor has no rotationally invariant B-projections, only A-products
+//        projections(func_rank1_ind)+=func->ctildes[0]*A_cur;
+//#endif
     } // end loop for rank=1
 
     //rank>1
@@ -436,16 +436,16 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                 //real-part only multiplication
                 rhos(p) += B.real_part_product(func->ctildes[ms_ind * ndensity + p]);
 
-#ifdef EXTRA_C_PROJECTIONS
-                //aggregate C-projections separately
-                basis_projections(func_ind, p)+=B.real_part_product(func->ctildes[ms_ind * ndensity + p]);
-#endif
-
 #ifdef PRINT_INTERMEDIATE_VALUES
                 printf("rhos(%d) += %f\n", p, B.real_part_product(func->ctildes[ms_ind * ndensity + p]));
                 printf("Rho[i = %d][p = %d] = %f\n",  i , p , rhos(p));
 #endif
             }
+//#ifdef EXTRA_C_PROJECTIONS
+//            //aggregate C-projections separately
+//            // always take 0-th density, because Ctilde evalutor has no rotationally invariant B-projections, only A-products
+//            projections(total_basis_size_rank1+func_ind)+=B.real_part_product(func->ctildes[ms_ind * ndensity]);
+//#endif
         }//end of loop over {ms} combinations in sum
     }// end loop for rank>1
 
