@@ -48,9 +48,6 @@ protected:
     Array2D<DOUBLE_TYPE> A_rank1 = Array2D<DOUBLE_TYPE>("A_rank1"); ///< 2D-array for storing A's for rank=1, shape: A(mu_j,n)
     Array4DLM<ACEComplex> A = Array4DLM<ACEComplex>("A"); ///< 4D array with (l,m) last indices  for storing A's for rank>1: A(mu_j, n, l, m)
 
-    Array1D<DOUBLE_TYPE> rhos = Array1D<DOUBLE_TYPE>("rhos"); ///< densities \f$ \rho^{(p)} \f$(ndensity), p  = 0 .. ndensity-1
-    Array1D<DOUBLE_TYPE> dF_drho = Array1D<DOUBLE_TYPE>("dF_drho"); ///< derivatives of cluster functional wrt. densities, index = 0 .. ndensity-1
-
     /**
      * Initialize internal arrays according to basis set sizes
      * @param basis_set
@@ -58,6 +55,9 @@ protected:
     void init(ACEAbstractBasisSet *basis_set);
 
 public:
+    Array1D<DOUBLE_TYPE> rhos = Array1D<DOUBLE_TYPE>("rhos"); ///< densities \f$ \rho^{(p)} \f$(ndensity), p  = 0 .. ndensity-1
+    Array1D<DOUBLE_TYPE> dF_drho = Array1D<DOUBLE_TYPE>("dF_drho"); ///< derivatives of cluster functional wrt. densities, index = 0 .. ndensity-1
+
     // set of timers for code profiling
 
     ACETimer loop_over_neighbour_timer; ///< timer for loop over neighbours when constructing A's for single central atom
@@ -112,15 +112,13 @@ public:
     virtual void resize_neighbours_cache(int max_jnum) = 0;
 
 #ifdef EXTRA_C_PROJECTIONS
-    /**
-     * 2D array to store projections of basis function for rank = 1, shape: [func_ind][ndensity]
-     */
-    Array2D<DOUBLE_TYPE> basis_projections_rank1 = Array2D<DOUBLE_TYPE>("basis_projections_rank1");
+    /* 1D array to store projections of basis function (all ranks), shape: [func_ind] */
+    Array1D<DOUBLE_TYPE> projections  = Array1D<DOUBLE_TYPE>("projections");
 
-    /**
-     * 2D array to store projections of basis function for rank > 1, shape: [func_ind][ndensity]
-     */
-    Array2D<DOUBLE_TYPE> basis_projections = Array2D<DOUBLE_TYPE>("basis_projections");
+    Array1D<DOUBLE_TYPE> dE_dc  = Array1D<DOUBLE_TYPE>("dE_dc");
+
+
+    DOUBLE_TYPE max_gamma_grade = 0;
 #endif
 };
 

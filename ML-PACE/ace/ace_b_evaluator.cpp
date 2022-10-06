@@ -1,65 +1,25 @@
-/*
- * Performant implementation of atomic cluster expansion and interface to LAMMPS
- *
- * Copyright 2021  (c) Yury Lysogorskiy^1, Cas van der Oord^2, Anton Bochkarev^1,
- * Sarath Menon^1, Matteo Rinaldi^1, Thomas Hammerschmidt^1, Matous Mrovec^1,
- * Aidan Thompson^3, Gabor Csanyi^2, Christoph Ortner^4, Ralf Drautz^1
- *
- * ^1: Ruhr-University Bochum, Bochum, Germany
- * ^2: University of Cambridge, Cambridge, United Kingdom
- * ^3: Sandia National Laboratories, Albuquerque, New Mexico, USA
- * ^4: University of British Columbia, Vancouver, BC, Canada
- *
- *
- * See the LICENSE file.
- * This FILENAME is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
-
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
-
+//
 // Created by Yury Lysogorskiy on 31.01.20.
+//
+
+#include "ace_b_evaluator.h"
+
+#include "cnpy.h"
 
 #include "ace_evaluator.h"
-
-#include "ace_abstract_basis.h"
 #include "ace_types.h"
-
-void ACEEvaluator::init(ACEAbstractBasisSet *basis_set) {
-    A.init(basis_set->nelements, basis_set->nradmax + 1, basis_set->lmax + 1, "A");
-    A_rank1.init(basis_set->nelements, basis_set->nradbase, "A_rank1");
-
-    rhos.init(basis_set->ndensitymax + 1, "rhos"); // +1 density for core repulsion
-    dF_drho.init(basis_set->ndensitymax + 1, "dF_drho"); // +1 density for core repulsion
-}
-
-void ACEEvaluator::init_timers() {
-    loop_over_neighbour_timer.init();
-    forces_calc_loop_timer.init();
-    forces_calc_neighbour_timer.init();
-    energy_calc_timer.init();
-    per_atom_calc_timer.init();
-    total_time_calc_timer.init();
-}
+#include "ace_abstract_basis.h"
 
 //================================================================================================================
 
-void ACECTildeEvaluator::set_basis(ACECTildeBasisSet &bas) {
+void ACEBEvaluator::set_basis(ACEBBasisSet &bas) {
     basis_set = &bas;
     init(basis_set);
 }
 
-void ACECTildeEvaluator::init(ACECTildeBasisSet *basis_set) {
+void ACEBEvaluator::init(ACEBBasisSet *basis_set) {
 
     ACEEvaluator::init(basis_set);
-
 
     weights.init(basis_set->nelements, basis_set->nradmax + 1, basis_set->lmax + 1,
                  "weights");
@@ -90,9 +50,9 @@ void ACECTildeEvaluator::init(ACECTildeBasisSet *basis_set) {
 
 }
 
-void ACECTildeEvaluator::resize_neighbours_cache(int max_jnum) {
-    if(basis_set== nullptr) {
-        throw std::invalid_argument("ACECTildeEvaluator: basis set is not assigned");
+void ACEBEvaluator::resize_neighbours_cache(int max_jnum) {
+    if (basis_set == nullptr) {
+        throw std::invalid_argument("ACEBEvaluator: basis set is not assigned");
     }
     if (R_cache.get_dim(0) < max_jnum) {
 
@@ -127,14 +87,11 @@ void ACECTildeEvaluator::resize_neighbours_cache(int max_jnum) {
 // jnum - number of J neighbors for each I atom.  jnum = numneigh[i];
 
 void
-ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, const int jnum, const int *jlist) {
-    if(basis_set== nullptr) {
-        throw std::invalid_argument("ACECTildeEvaluator: basis set is not assigned");
+ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, const int jnum, const int *jlist) {
+    if (basis_set == nullptr) {
+        throw std::invalid_argument("ACEBEvaluator: basis set is not assigned");
     }
     per_atom_calc_timer.start();
-#ifdef PRINT_MAIN_STEPS
-    printf("\n ATOM: ind = %d r_norm=(%f, %f, %f)\n",i, x[i][0], x[i][1], x[i][2]);
-#endif
     DOUBLE_TYPE evdwl = 0, evdwl_cut = 0, rho_core = 0;
     DOUBLE_TYPE r_norm;
     DOUBLE_TYPE xn, yn, zn, r_xyz;
@@ -184,13 +141,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         mu_i = element_type_mapping(type[i]);
     else
         mu_i = type[i];
-    if (mu_i == -1) throw std::invalid_argument("Central atom  species type = -1. Stopping");
 
     const SHORT_INT_TYPE total_basis_size_rank1 = basis_set->total_basis_size_rank1[mu_i];
     const SHORT_INT_TYPE total_basis_size = basis_set->total_basis_size[mu_i];
 
-    ACECTildeBasisFunction *basis_rank1 = basis_set->basis_rank1[mu_i];
-    ACECTildeBasisFunction *basis = basis_set->basis[mu_i];
+    auto basis_rank1 = basis_set->basis_rank1[mu_i];
+    auto basis = basis_set->basis[mu_i];
 
     DOUBLE_TYPE rho_cut, drho_cut, fcut, dfcut;
     DOUBLE_TYPE dF_drho_core;
@@ -204,6 +160,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     //TODO: nradbase -> nradbasei (get per-species type)
     const NS_TYPE nradbasei = basis_set->nradbase;
 
+    //TODO: get per-species type number of densities
     const DENSITY_TYPE ndensity = basis_set->map_embedding_specifications[mu_i].ndensity;
 
     neighbours_forces.resize(jnum, 3);
@@ -218,10 +175,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     dF_drho.fill(0);
 
 #ifdef EXTRA_C_PROJECTIONS
-    basis_projections_rank1.init(total_basis_size_rank1, ndensity, "c_projections_rank1");
-    basis_projections_rank1.fill(0);
-    basis_projections.init(total_basis_size, ndensity, "c_projections");
-    basis_projections.fill(0);
+    //TODO: resize arrays or let them be of maximal size?
+    projections.init(total_basis_size_rank1 + total_basis_size, "projections");
+    projections.fill(0);
+
+    dE_dc.init((total_basis_size_rank1 + total_basis_size) * ndensity, "dE_dc");
+    dE_dc.fill(0);
 #endif
 
     //proxy references to spherical harmonics and radial functions arrays
@@ -251,7 +210,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             mu_j = element_type_mapping(type_j);
         else
             mu_j = type_j;
-        if (mu_j == -1) throw std::invalid_argument("Neighbour atom species type = -1. Stopping");
+
         DOUBLE_TYPE current_cutoff = basis_set->radial_functions->cut(mu_i, mu_j);
         r_xyz = sqrt(xn * xn + yn * yn + zn * zn);
 
@@ -348,14 +307,13 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
     energy_calc_timer.start();
 #ifdef EXTRA_C_PROJECTIONS
-    basis_projections_rank1.fill(0);
-    basis_projections.fill(0);
+    projections.fill(0);
 #endif
 
     //ALGORITHM 2: Basis functions B with iterative product and density rho(p) calculation
     //rank=1
     for (int func_rank1_ind = 0; func_rank1_ind < total_basis_size_rank1; ++func_rank1_ind) {
-        ACECTildeBasisFunction *func = &basis_rank1[func_rank1_ind];
+        auto func = &basis_rank1[func_rank1_ind];
 //        ndensity = func->ndensity;
 #ifdef PRINT_LOOPS_INDICES
         printf("Num density = %d r = 0\n",(int) ndensity );
@@ -364,15 +322,14 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         double A_cur = A_rank1(func->mus[0], func->ns[0] - 1);
 #ifdef DEBUG_ENERGY_CALCULATIONS
         printf("A_r=1(x=%d, n=%d)=(%f)\n", func->mus[0], func->ns[0], A_cur);
-        printf("     coeff[0] = %f\n", func->ctildes[0]);
+#endif
+#ifdef EXTRA_C_PROJECTIONS
+        //aggregate C-projections separately
+        projections(func_rank1_ind) += A_cur;
 #endif
         for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
             //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
-            rhos(p) += func->ctildes[p] * A_cur;
-#ifdef EXTRA_C_PROJECTIONS
-            //aggregate C-projections separately
-            basis_projections_rank1(func_rank1_ind, p)+= func->ctildes[p] * A_cur;
-#endif
+            rhos(p) += func->coeff[p] * A_cur;// * func->gen_cgs[0];
         }
     } // end loop for rank=1
 
@@ -381,7 +338,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     int func_ms_t_ind = 0;// index for dB
 
     for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
-        ACECTildeBasisFunction *func = &basis[func_ind];
+        auto func = &basis[func_ind];
         //TODO: check if func->ctildes are zero, then skip
 //        ndensity = func->ndensity;
         rank = func->rank;
@@ -414,7 +371,6 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             }
 
             B = A_forward_prod[t];
-            
 #ifdef DEBUG_FORCES_CALCULATIONS
             printf("B = (%f, %f)\n", (B).real, (B).img);
 #endif
@@ -432,16 +388,13 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                 printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
 #endif
             }
-
+#ifdef EXTRA_C_PROJECTIONS
+            //aggregate C-projections separately
+            projections(total_basis_size_rank1 + func_ind) += B.real_part_product(func->gen_cgs[ms_ind]);
+#endif
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 //real-part only multiplication
-                rhos(p) += B.real_part_product(func->ctildes[ms_ind * ndensity + p]);
-
-#ifdef EXTRA_C_PROJECTIONS
-                //aggregate C-projections separately
-                basis_projections(func_ind, p)+=B.real_part_product(func->ctildes[ms_ind * ndensity + p]);
-#endif
-
+                rhos(p) += B.real_part_product(func->gen_cgs[ms_ind] * func->coeff[p]);
 #ifdef PRINT_INTERMEDIATE_VALUES
                 printf("rhos(%d) += %f\n", p, B.real_part_product(func->ctildes[ms_ind * ndensity + p]));
                 printf("Rho[i = %d][p = %d] = %f\n",  i , p , rhos(p));
@@ -463,21 +416,20 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
     basis_set->inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
     basis_set->FS_values_and_derivatives(rhos, evdwl, dF_drho, mu_i);
-#ifdef DEBUG_ENERGY_CALCULATIONS
-    printf("ACE = %f, rho_core = %f, fcut=%f\n",evdwl, rho_core, fcut);
+
+#ifdef EXTRA_C_PROJECTIONS
+    int projections_size = projections.get_size();
+    int dE_dc_ind = 0;
+    for (DENSITY_TYPE p = 0; p < ndensity; p++) {
+        for (int proj_ind = 0; proj_ind < projections_size; proj_ind++, dE_dc_ind++)
+            dE_dc(dE_dc_ind) = dF_drho(p) * projections(proj_ind);
+    }
 #endif
     dF_drho_core = evdwl * dfcut + 1;
     for (DENSITY_TYPE p = 0; p < ndensity; ++p)
         dF_drho(p) *= fcut;
     evdwl_cut = evdwl * fcut + rho_core;
-#ifdef DEBUG_ENERGY_CALCULATIONS
-    printf("ACE_cut = %f\n",evdwl_cut);
-#endif
-    // E0 shift 
-    evdwl_cut += basis_set->E0vals(mu_i);
-#ifdef DEBUG_ENERGY_CALCULATIONS
-    printf("E_total(+E0) = %f\n",evdwl_cut);
-#endif
+
 #ifdef DEBUG_FORCES_CALCULATIONS
     printf("dFrhos = ");
     for(DENSITY_TYPE p =0; p<ndensity; ++p) printf(" %f ",dF_drho(p));
@@ -487,11 +439,11 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     //ALGORITHM 3: Weights and theta calculation
     // rank = 1
     for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
-        ACECTildeBasisFunction *func = &basis_rank1[f_ind];
+        auto func = &basis_rank1[f_ind];
 //        ndensity = func->ndensity;
         for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
             //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
-            weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->ctildes[p];
+            weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->coeff[p];
         }
     }
 
@@ -500,7 +452,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     func_ms_t_ind = 0;// index for dB
     DOUBLE_TYPE theta = 0;
     for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
-        ACECTildeBasisFunction *func = &basis[func_ind];
+        auto func = &basis[func_ind];
 //        ndensity = func->ndensity;
         rank = func->rank;
         mus = func->mus;
@@ -510,9 +462,9 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             ms = &func->ms_combs[ms_ind * rank];
             theta = 0;
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
-                theta += dF_drho(p) * func->ctildes[ms_ind * ndensity + p];
+                theta += dF_drho(p) * func->gen_cgs[ms_ind] * func->coeff[p];
 #ifdef DEBUG_FORCES_CALCULATIONS
-                printf("(p=%d) theta += dF_drho[p] * func.ctildes[ms_ind * ndensity + p] = %f * %f = %f\n",p, dF_drho(p), func->ctildes[ms_ind * ndensity + p],dF_drho(p)*func->ctildes[ms_ind * ndensity + p]);
+                printf("(p=%d) theta += dF_drho[p] * func.ctildes[ms_ind * ndensity + p] = %f * %f = %f\n",p, dF_drho(p), func->gen_cgs[ms_ind] * func->coeff[p],dF_drho(p)*func->gen_cgs[ms_ind] * func->coeff[p]);
                 printf("theta=%f\n",theta);
 #endif
             }
@@ -596,7 +548,6 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                         continue;
                     //counting for -m cases if m>0
                     if (m > 0) w *= 2;
-
                     DY = DY_cache_jj(l, m);
                     Y_DR = Y_cache_jj(l, m) * DR;
 
@@ -660,6 +611,28 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     //now, energies and forces are ready
     //energies(i) = evdwl + rho_core;
     e_atom = evdwl_cut;
+#ifdef EXTRA_C_PROJECTIONS
+    //check if active set is loaded
+    // use dE_dc or projections as asi_vector
+    Array1D<DOUBLE_TYPE> &asi_vector = (is_linear_extrapolation_grade ? projections : dE_dc);
+    if (A_active_set_inv.find(mu_i) != A_active_set_inv.end()) {
+        // get inverted active set for current species type
+        const auto &A_as_inv = A_active_set_inv.at(mu_i);
+
+        DOUBLE_TYPE gamma_max = 0;
+        for (int i = 0; i < A_as_inv.get_dim(0); i++) {
+            DOUBLE_TYPE current_gamma = 0;
+            // compute row-matrix-multiplication asi_vector * A_as_inv (transposed matrix)
+            for (int k = 0; k < asi_vector.get_dim(0); k++)
+                current_gamma += asi_vector(k) * A_as_inv(i, k);
+
+            if (abs(current_gamma) > gamma_max)
+                gamma_max = abs(current_gamma);
+        }
+
+        max_gamma_grade = gamma_max;
+    }
+#endif
 
 #ifdef PRINT_INTERMEDIATE_VALUES
     printf("energies(i) = FS(...rho_p_accum...) = %f\n", evdwl);
@@ -667,3 +640,134 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     per_atom_calc_timer.stop();
 }
 
+void ACEBEvaluator::load_active_set(const string &asi_filename, bool is_linear, bool is_auto_determine) {
+    //load the entire npz file
+    cnpy::npz_t asi_npz = cnpy::npz_load(asi_filename);
+    if (asi_npz.size() != this->basis_set->nelements) {
+        stringstream ss;
+        ss << "Number of species types in ASI `" << asi_filename << "` (" << asi_npz.size() << ")";
+        ss << "not equal to number of species in ACEBBassiSet (" << this->basis_set->nelements << ")";
+        throw std::runtime_error(ss.str());
+    }
+
+    // auto-determine is_linear_extrapolation
+    if (is_auto_determine) {
+        vector<bool> linear_extrapolation_flag_vector(basis_set->nelements);
+        for (auto &kv: asi_npz) {
+            auto element_name = kv.first;
+            SPECIES_TYPE st = basis_set->elements_to_index_map.at(element_name);
+            auto shape = kv.second.shape;
+            // auto_determine extrapolation grade type: linear or non-linear
+            validate_ASI_square_shape(st, shape);
+            int number_of_functions = basis_set->total_basis_size_rank1[st] + basis_set->total_basis_size[st];
+            int ndensity = basis_set->map_embedding_specifications[st].ndensity;
+
+            if (shape.at(0) == number_of_functions) {
+                linear_extrapolation_flag_vector.at(st) = true;
+            } else if (shape.at(0) == number_of_functions * ndensity) {
+                linear_extrapolation_flag_vector.at(st) = false;
+            } else {
+                stringstream ss;
+                ss << "Active Set Inverted for element `" << element_name << "`:";
+                ss << "expected size " << number_of_functions << " (linear) or " << number_of_functions * ndensity
+                   << " (nonlinear) , but has size " << shape.at(0);
+                throw runtime_error(ss.str());
+            }
+        }
+        if (!equal(linear_extrapolation_flag_vector.begin() + 1, linear_extrapolation_flag_vector.end(),
+                   linear_extrapolation_flag_vector.begin())) {
+            stringstream ss;
+            ss
+                    << "Active Set Inverted: could not determine extrapolation type (linear or non-linear) automatically, because it differs for different elements";
+            throw runtime_error(ss.str());
+        }
+
+        is_linear_extrapolation_grade = linear_extrapolation_flag_vector.at(0);
+    } else {
+        is_linear_extrapolation_grade = is_linear;
+    }
+
+
+    for (auto &kv: asi_npz) {
+        auto element_name = kv.first;
+        SPECIES_TYPE st = this->basis_set->elements_to_index_map.at(element_name);
+        auto shape = kv.second.shape;
+        // auto_determine extrapolation grade type: linear or non-linear
+        validate_ASI_square_shape(st, shape);
+        validate_ASI_shape(element_name, st, shape);
+
+        Array2D<DOUBLE_TYPE> A0_inv(shape.at(0), shape.at(1), element_name);
+        auto data_vec = kv.second.as_vec<DOUBLE_TYPE>();
+        A0_inv.set_flatten_vector(data_vec);
+        //transpose matrix to speed-up vec-mat multiplication
+        Array2D<DOUBLE_TYPE> A0_inv_transpose(A0_inv.get_dim(1), A0_inv.get_dim(0));
+
+        for (int i = 0; i < A0_inv.get_dim(0); i++)
+            for (int j = 0; j < A0_inv.get_dim(1); j++)
+                A0_inv_transpose(j, i) = A0_inv(i, j);
+
+        this->A_active_set_inv[st] = A0_inv_transpose;
+    }
+    resize_projections();
+}
+
+void ACEBEvaluator::validate_ASI_shape(const string &element_name, SPECIES_TYPE st,
+                                       const vector<size_t> &shape) {
+    //check that array shape corresponds to number of projections (linear case) or number of projections * ndensity
+    int expected_ASI_size;
+    int number_of_functions = basis_set->total_basis_size_rank1[st] + basis_set->total_basis_size[st];
+    if (is_linear_extrapolation_grade)
+        expected_ASI_size = number_of_functions;
+    else
+        expected_ASI_size = number_of_functions * basis_set->map_embedding_specifications[st].ndensity;
+    if (expected_ASI_size != shape.at(0)) {
+        stringstream ss;
+        ss << "Active Set Inverted for element `" << element_name << "`:";
+        ss << "expected shape: (" << expected_ASI_size << ", " << expected_ASI_size << ") , but has shape ("
+           << shape.at(0) << ", " << shape.at(1) << ")";
+        throw runtime_error(ss.str());
+    }
+}
+
+void ACEBEvaluator::validate_ASI_square_shape(SPECIES_TYPE st, const vector<size_t> &shape) {
+    // check for square shape of ASI
+    if (shape.at(0) != shape.at(1)) {
+        stringstream ss;
+        string element_name = this->basis_set->elements_name[st];
+        ss << "Active Set Inverted for element `" << element_name << "`:";
+        ss << "should be square matrix, but has shape (" << shape.at(0) << ", " << shape.at(1) << ")";
+        throw runtime_error(ss.str());
+    }
+}
+
+//TODO: add is_linear and is_auto_determine options
+void ACEBEvaluator::set_active_set(const vector<vector<vector<DOUBLE_TYPE>>> &species_type_active_set_inv) {
+    for (SPECIES_TYPE mu = 0; mu < species_type_active_set_inv.size(); mu++) {
+        const auto &active_set = species_type_active_set_inv.at(mu);
+        Array2D<DOUBLE_TYPE> A0_inv(active_set.size(), active_set.at(0).size());
+        validate_ASI_square_shape(mu, A0_inv.get_shape());
+        A0_inv.set_vector(active_set);
+        //transpose matrix to speed-up vec-mat multiplication
+        Array2D<DOUBLE_TYPE> A0_inv_transpose(A0_inv.get_dim(1), A0_inv.get_dim(0));
+
+        for (int i = 0; i < A0_inv.get_dim(0); i++)
+            for (int j = 0; j < A0_inv.get_dim(1); j++)
+                A0_inv_transpose(j, i) = A0_inv(i, j);
+
+        this->A_active_set_inv[mu] = A0_inv_transpose;
+    }
+    resize_projections();
+}
+
+void ACEBEvaluator::resize_projections() {
+    // find the maximal basis size per element and resize projections array correspondingly
+    size_t max_basis_size = 0; // include rank1 + rank>1
+    for (SPECIES_TYPE mu = 0; mu < basis_set->nelements; mu++) {
+        size_t curr_basis_size = this->basis_set->total_basis_size_rank1[mu] + this->basis_set->total_basis_size[mu];
+        if (curr_basis_size > max_basis_size) {
+            max_basis_size = curr_basis_size;
+        }
+    }
+
+    this->projections.resize(max_basis_size);
+}
