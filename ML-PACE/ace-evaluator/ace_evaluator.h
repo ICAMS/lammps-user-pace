@@ -80,6 +80,7 @@ public:
      */
     Array1D<int> element_type_mapping = Array1D<int>("element_type_mapping");
 
+    Array1D<DOUBLE_TYPE> B_all = Array1D<DOUBLE_TYPE>("B_all"); //rank 1+ invariants shape B(ncoeffs)
 
     DOUBLE_TYPE e_atom = 0; ///< energy of current atom, including core-repulsion
 
@@ -88,6 +89,8 @@ public:
      * neighbours_forces(k,3),  k = 0..num_of_neighbours(atom_i)-1
      */
     Array2D<DOUBLE_TYPE> neighbours_forces = Array2D<DOUBLE_TYPE>("neighbours_forces");
+    // Array to hold the descriptor decomposed force contributions per neighbour
+    Array3D<DOUBLE_TYPE> neighbours_dB = Array3D<DOUBLE_TYPE>("neighbours_dB");
 
     ACEEvaluator() = default;
 
@@ -133,12 +136,14 @@ class ACECTildeEvaluator : public ACEEvaluator {
      * 'i' is fixed for the current atom, shape: [nelements][nradbase]
      */
     Array2D<DOUBLE_TYPE> weights_rank1 = Array2D<DOUBLE_TYPE>("weights_rank1");
+    Array2D<DOUBLE_TYPE> weights_rank1_dB = Array2D<DOUBLE_TYPE>("weights_rank1_dB"); //for force contributions to A matrix
 
     /**
      * Weights \f$ \omega_{i \mu n l m} \f$ for rank > 1, see Eq.(10) from implementation notes,
      * 'i' is fixed for the current atom, shape: [nelements][nradbase][l=0..lmax, m]
      */
     Array4DLM<ACEComplex> weights = Array4DLM<ACEComplex>("weights");
+    Array4DLM<ACEComplex> weights_dB = Array4DLM<ACEComplex>("weights_dB");
 
     /**
      * cache for gradients of \f$ g(r)\f$: grad_phi(jj,n)=A2DLM(l,m)

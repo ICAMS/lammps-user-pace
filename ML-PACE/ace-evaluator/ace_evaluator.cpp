@@ -87,8 +87,18 @@ void ACECTildeEvaluator::init(ACECTildeBasisSet *basis_set) {
     DCR_cache.fill(0);
     dB_flatten.init(basis_set->max_dB_array_size, "dB_flatten");
 
-
+    //assumes the same basis size per element index
+    int tr1,tr;
+    for (int muind = 0 ; muind < basis_set->nelements; muind ++){
+        tr1 = basis_set->total_basis_size_rank1[muind];
+        tr = basis_set->total_basis_size[muind];
+    }
+    B_all.init(tr1+tr);
+    weights_rank1_dB.init(tr1, basis_set->nradbase, "weights_rank1_dB");
+    weights_dB.init(tr, basis_set->nradmax + 1, basis_set->lmax + 1, "weights_dB");
 }
+
+
 
 void ACECTildeEvaluator::resize_neighbours_cache(int max_jnum) {
     if(basis_set== nullptr) {
@@ -208,13 +218,19 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     neighbours_forces.resize(jnum, 3);
     neighbours_forces.fill(0);
 
+    neighbours_dB.resize(total_basis_size_rank1+total_basis_size,jnum,3);
+    neighbours_dB.fill(0);
+
     //TODO: shift nullifications to place where arrays are used
     weights.fill({0});
     weights_rank1.fill(0);
+    weights_dB.fill({0});
+    weights_rank1_dB.fill(0);
     A.fill({0});
     A_rank1.fill(0);
     rhos.fill(0);
     dF_drho.fill(0);
+    B_all.fill(0);
 
 //#ifdef EXTRA_C_PROJECTIONS
 //    projections.init(total_basis_size_rank1+total_basis_size,"projections");
@@ -364,6 +380,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         printf("A_r=1(x=%d, n=%d)=(%f)\n", func->mus[0], func->ns[0], A_cur);
         printf("     coeff[0] = %f\n", func->ctildes[0]);
 #endif
+        B_all(func_rank1_ind) += func->ctildes[0]*A_cur;
         for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
             //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
             rhos(p) += func->ctildes[p] * A_cur;
@@ -432,6 +449,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 #endif
             }
 
+            B_all(func_ind + total_basis_size_rank1) += B.real_part_product(func->ctildes[ms_ind *ndensity + 0]); // linear density contribution only
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 //real-part only multiplication
                 rhos(p) += B.real_part_product(func->ctildes[ms_ind * ndensity + p]);
@@ -488,6 +506,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
         ACECTildeBasisFunction *func = &basis_rank1[f_ind];
 //        ndensity = func->ndensity;
+        weights_rank1_dB(f_ind, func->ns[0] - 1) += func->ctildes[0]; // only 0th density index for ctilde gradient breakout
         for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
             //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
             weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->ctildes[p];
@@ -497,7 +516,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     // rank>1
     func_ms_ind = 0;
     func_ms_t_ind = 0;// index for dB
-    DOUBLE_TYPE theta = 0;
+    DOUBLE_TYPE theta, theta_dB = 0;
     for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
         ACECTildeBasisFunction *func = &basis[func_ind];
 //        ndensity = func->ndensity;
@@ -508,6 +527,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         for (ms_ind = 0; ms_ind < func->num_ms_combs; ++ms_ind, ++func_ms_ind) {
             ms = &func->ms_combs[ms_ind * rank];
             theta = 0;
+            theta_dB = func->ctildes[ms_ind * ndensity + 0]; //only 0th density projection for theta_dB
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 theta += dF_drho(p) * func->ctildes[ms_ind * ndensity + p];
 #ifdef DEBUG_FORCES_CALCULATIONS
@@ -517,6 +537,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             }
 
             theta *= 0.5; // 0.5 factor due to possible double counting ???
+            theta_dB *= 0.5; // factor for ctilde gradient breakout as well
             for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
                 m_t = ms[t];
                 factor = (m_t % 2 == 0 ? 1 : -1);
@@ -525,6 +546,9 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                 // update -m_t (that could also be positive), because the basis is half_basis
                 weights(mus[t], ns[t] - 1, ls[t], -m_t) +=
                         theta * (dB).conjugated() * factor;// Theta_array(func_ms_ind);
+                weights_dB(func_ind, ns[t] - 1, ls[t], m_t) += theta_dB * dB;
+                weights_dB(func_ind, ns[t] - 1, ls[t], -m_t) +=
+                        theta_dB * (dB).conjugated() * factor;
 #ifdef DEBUG_FORCES_CALCULATIONS
                 printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
                 printf("theta = %f\n",theta);
@@ -580,6 +604,9 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             f_ji[0] += DGR * r_hat[0];
             f_ji[1] += DGR * r_hat[1];
             f_ji[2] += DGR * r_hat[2];
+            neighbours_dB(n,neighbour_index_mapping[jj],0) += DGR * r_hat[0];
+            neighbours_dB(n,neighbour_index_mapping[jj],1) += DGR * r_hat[1];
+            neighbours_dB(n,neighbour_index_mapping[jj],2) += DGR * r_hat[2];
         }
 
 //for rank > 1
@@ -623,7 +650,36 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                 }
             }
         }
+    // secondary loop to accumulate descriptor gradient contributions -
+    //   May want to add logical to turn of this accumulation loop if no compute present
+    //for rank > 1 dB A matrix contributions
+        for (func_ind = 0;func_ind < total_basis_size; func_ind ++){
+            for (n = 0; n < nradiali; n++) {
+                for (l = 0; l <= lmaxi; l++) {
+                    R_over_r = R_cache(jj, n, l) * inv_r_norm;
+                    DR = DR_cache(jj, n, l);
 
+                    // for m>=0
+                    for (m = 0; m <= l; m++) {
+                        ACEComplex w_dB = weights_dB(func_ind, n, l, m);//mu_j -> func_ind -- need to handle mu_j implicitly with func_ind chemical index offfsets
+                        if (w_dB == 0)
+                            continue;
+                        //counting for -m cases if m>0
+                        if (m > 0) w_dB *= 2;
+
+                        DY = DY_cache_jj(l, m);
+                        Y_DR = Y_cache_jj(l, m) * DR;
+
+                        grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
+                        grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
+                        grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+                        neighbours_dB(total_basis_size_rank1+func_ind,neighbour_index_mapping[jj],0) += w_dB.real_part_product(grad_phi_nlm.a[0]);
+                        neighbours_dB(total_basis_size_rank1+func_ind,neighbour_index_mapping[jj],1) += w_dB.real_part_product(grad_phi_nlm.a[1]);
+                        neighbours_dB(total_basis_size_rank1+func_ind,neighbour_index_mapping[jj],2) += w_dB.real_part_product(grad_phi_nlm.a[2]);
+                        }
+                    }
+                }
+           }
 
 #ifdef PRINT_INTERMEDIATE_VALUES
         printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
