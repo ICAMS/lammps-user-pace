@@ -1,10 +1,10 @@
-#include "ace_clebsch_gordan.h"
+#include "ace/ace_clebsch_gordan.h"
 
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
-#include "wigner_3nj.hpp"
+#include "wigner/wigner_3nj.hpp"
 
 using namespace std;
 

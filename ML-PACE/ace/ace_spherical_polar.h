@@ -3,10 +3,10 @@
 
 #include <cmath>
 
-#include "ace_arraynd.h"
-#include "ace_array2dlm.h"
-#include "ace_complex.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_array2dlm.h"
+#include "ace-evaluator/ace_complex.h"
+#include "ace-evaluator/ace_types.h"
 
 
 using namespace std;

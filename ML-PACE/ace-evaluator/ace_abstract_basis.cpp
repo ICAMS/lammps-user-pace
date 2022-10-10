@@ -27,8 +27,8 @@
 
 // Created by Lysogorskiy Yury on 28.04.2020.
 
-#include "ace_abstract_basis.h"
-#include "ace_radial.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_radial.h"
 
 ////embedding function
 ////case nemb = 1 only implementation

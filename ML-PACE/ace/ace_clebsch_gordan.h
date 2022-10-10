@@ -4,8 +4,8 @@
 #include <cmath>
 #include <iostream>
 
-#include "ace_types.h"
-#include "ace_arraynd.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace-evaluator/ace_arraynd.h"
 
 using namespace std;
 

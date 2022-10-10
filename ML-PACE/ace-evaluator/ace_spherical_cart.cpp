@@ -29,7 +29,7 @@
 
 #include <cmath>
 
-#include "ace_spherical_cart.h"
+#include "ace-evaluator/ace_spherical_cart.h"
 
 ACECartesianSphericalHarmonics::ACECartesianSphericalHarmonics(LS_TYPE lm) {
     init(lm);

@@ -28,8 +28,8 @@
 #ifndef ACE_RADIAL_FUNCTIONS_H
 #define ACE_RADIAL_FUNCTIONS_H
 
-#include "ace_arraynd.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_types.h"
 #include <functional>
 
 

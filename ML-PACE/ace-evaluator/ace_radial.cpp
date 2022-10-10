@@ -30,7 +30,7 @@
 #include <functional>
 #include <stdexcept>
 
-#include "ace_radial.h"
+#include "ace-evaluator/ace_radial.h"
 
 #define sqr(x) ((x)*(x))
 const DOUBLE_TYPE pi = 3.14159265358979323846264338327950288419; // pi

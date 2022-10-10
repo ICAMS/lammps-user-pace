@@ -39,7 +39,7 @@
 
 #include "yaml-cpp/yaml.h"
 
-#include "ace_types.h"
+#include "ace-evaluator/ace_types.h"
 
 //macros for copying the member-array from "other" object for C-tilde and B-basis
 #define basis_mem_copy(other, array, size, type) if(other.array) { \

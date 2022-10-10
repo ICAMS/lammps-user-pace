@@ -10,8 +10,8 @@ C++ file which would contain the code for reading in an input file
 #include <string>
 #include <vector>
 
-#include "ace_types.h"
-#include "ace_b_basis.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace/ace_b_basis.h"
 
 using namespace std;
 

@@ -27,10 +27,10 @@
 
 // Created by Yury Lysogorskiy on 31.01.20.
 
-#include "ace_evaluator.h"
+#include "ace-evaluator/ace_evaluator.h"
 
-#include "ace_abstract_basis.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_types.h"
 
 void ACEEvaluator::init(ACEAbstractBasisSet *basis_set) {
     A.init(basis_set->nelements, basis_set->nradmax + 1, basis_set->lmax + 1, "A");

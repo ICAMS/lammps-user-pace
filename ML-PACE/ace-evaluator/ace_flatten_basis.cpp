@@ -28,7 +28,7 @@
 
 // Created by yury on 28.04.2020.
 
-#include "ace_flatten_basis.h"
+#include "ace-evaluator/ace_flatten_basis.h"
 
 ACEFlattenBasisSet::ACEFlattenBasisSet(const ACEFlattenBasisSet &other) {
     _copy_scalar_memory(other);

@@ -12,10 +12,10 @@
 
 #include "yaml-cpp/yaml.h"
 
-#include "ace_b_basisfunction.h"
-#include "ace_flatten_basis.h"
-#include "ace_clebsch_gordan.h"
-#include "ace_c_basis.h"
+#include "ace/ace_b_basisfunction.h"
+#include "ace-evaluator/ace_flatten_basis.h"
+#include "ace/ace_clebsch_gordan.h"
+#include "ace-evaluator/ace_c_basis.h"
 
 using namespace std;
 

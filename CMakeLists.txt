@@ -23,7 +23,7 @@ set(YAML_CPP_INCLUDE_DIR yaml-cpp/include)
 
 ## cnpy
 set(CNPY_PATH cnpy)
-set(CNPY_INCLUDE_PATH ${CNPY_PATH})
+set(CNPY_INCLUDE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 set(CNPY_SRC ${CNPY_PATH}/cnpy.cpp)
 add_library(cnpy-static STATIC ${CNPY_SRC})
 set_target_properties(cnpy-static PROPERTIES LINKER_LANGUAGE CXX)
@@ -31,11 +31,10 @@ set_target_properties(cnpy-static PROPERTIES LINKER_LANGUAGE CXX)
 ## winger-cpp
 # this is header-only library
 set(WIGNER_PATH wigner-cpp)
-set(WIGNER_INCLUDE_PATH ${WIGNER_PATH}/include/wigner)
+set(WIGNER_INCLUDE_PATH ${WIGNER_PATH}/include)
 
 # ML-PACE includes
-file(GLOB PACE_EVALUATOR_INCLUDE_DIR ML-PACE/ace-evaluator)
-file(GLOB PACE_INCLUDE_DIR ML-PACE/ace)
+file(GLOB PACE_INCLUDE_DIR ML-PACE)
 
 # ML-PACE sources
 file(GLOB PACE_EVALUATOR_SOURCES ML-PACE/ace-evaluator/*.cpp)
@@ -45,6 +44,7 @@ list(FILTER PACE_SOURCES EXCLUDE REGEX pair_pace*.cpp)
 
 add_library(pace STATIC ${PACE_EVALUATOR_SOURCES} ${PACE_SOURCES})
 #set_target_properties(pace PROPERTIES CXX_EXTENSIONS ON OUTPUT_NAME lammps_pace${LAMMPS_MACHINE})
-target_include_directories(pace PUBLIC ${PACE_EVALUATOR_INCLUDE_DIR} ${PACE_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR} ${CNPY_INCLUDE_PATH} ${WIGNER_INCLUDE_PATH})
+target_include_directories(pace PUBLIC ${PACE_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR})
+target_include_directories(pace PRIVATE ${CNPY_INCLUDE_PATH} ${WIGNER_INCLUDE_PATH})
 target_compile_definitions(pace PUBLIC EXTRA_C_PROJECTIONS) # important for B-projections and extrapolation grade calculations
 target_link_libraries(pace PRIVATE yaml-cpp-pace cnpy-static)

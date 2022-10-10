@@ -2,13 +2,13 @@
 // Created by Yury Lysogorskiy on 31.01.20.
 //
 
-#include "ace_b_evaluator.h"
+#include "ace/ace_b_evaluator.h"
 
-#include "cnpy.h"
+#include "cnpy/cnpy.h"
 
-#include "ace_evaluator.h"
-#include "ace_types.h"
-#include "ace_abstract_basis.h"
+#include "ace-evaluator/ace_evaluator.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace-evaluator/ace_abstract_basis.h"
 
 //================================================================================================================
 
