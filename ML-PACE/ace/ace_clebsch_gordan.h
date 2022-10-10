@@ -4,8 +4,6 @@
 #include <cmath>
 #include <iostream>
 
-#include "wigner_3nj.hpp"
-
 #include "ace_types.h"
 #include "ace_arraynd.h"
 
