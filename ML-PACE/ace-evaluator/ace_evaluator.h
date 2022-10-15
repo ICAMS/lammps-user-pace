@@ -31,13 +31,13 @@
 #ifndef ACE_EVALUATOR_H
 #define ACE_EVALUATOR_H
 
-#include "ace_abstract_basis.h"
-#include "ace_arraynd.h"
-#include "ace_array2dlm.h"
-#include "ace_c_basis.h"
-#include "ace_complex.h"
-#include "ace_timing.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_array2dlm.h"
+#include "ace-evaluator/ace_c_basis.h"
+#include "ace-evaluator/ace_complex.h"
+#include "ace-evaluator/ace_timing.h"
+#include "ace-evaluator/ace_types.h"
 
 /**
  * Basic evaluator class, that should accept the basis set and implement the "compute_atom" method using given basis set.

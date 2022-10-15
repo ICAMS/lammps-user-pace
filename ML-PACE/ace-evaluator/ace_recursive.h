@@ -31,14 +31,14 @@
 #ifndef ACE_RECURSIVE_H
 #define ACE_RECURSIVE_H
 
-#include "ace_abstract_basis.h"
-#include "ace_arraynd.h"
-#include "ace_array2dlm.h"
-#include "ace_c_basis.h"
-#include "ace_complex.h"
-#include "ace_timing.h"
-#include "ace_types.h"
-#include "ace_evaluator.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_array2dlm.h"
+#include "ace-evaluator/ace_c_basis.h"
+#include "ace-evaluator/ace_complex.h"
+#include "ace-evaluator/ace_timing.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace-evaluator/ace_evaluator.h"
 
 #include <list>
 #include <utility>

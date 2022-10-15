@@ -28,10 +28,10 @@
 
 // Created by Christoph Ortner on 20.12.2020
 
-#include "ace_recursive.h"
+#include "ace-evaluator/ace_recursive.h"
 
-#include "ace_abstract_basis.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_types.h"
 
 /* ------------------------------------------------------------
  *        ACEDAG Implementation

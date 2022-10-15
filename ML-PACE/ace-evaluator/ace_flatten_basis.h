@@ -31,11 +31,11 @@
 #define ACE_EVALUATOR_ACE_FLATTEN_BASIS_H
 
 
-#include "ace_abstract_basis.h"
-#include "ace_c_basisfunction.h"
-#include "ace_radial.h"
-#include "ace_spherical_cart.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_abstract_basis.h"
+#include "ace-evaluator/ace_c_basisfunction.h"
+#include "ace-evaluator/ace_radial.h"
+#include "ace-evaluator/ace_spherical_cart.h"
+#include "ace-evaluator/ace_types.h"
 
 /**
  * Basis set with basis function attributes, i.e. \f$ \mathbf{n}, \mathbf{l}, \mathbf{m}\f$, etc.

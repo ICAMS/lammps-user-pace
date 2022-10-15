@@ -30,8 +30,8 @@
 #ifndef ACE_C_BASIS_H
 #define ACE_C_BASIS_H
 
-#include "ace_flatten_basis.h"
-#include "ships_radial.h"
+#include "ace-evaluator/ace_flatten_basis.h"
+#include "ace-evaluator/ships_radial.h"
 
 typedef vector<vector<ACECTildeBasisFunction>> C_tilde_full_basis_vector2d;
 

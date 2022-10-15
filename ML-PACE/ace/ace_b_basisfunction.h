@@ -14,8 +14,8 @@
 
 #include "yaml-cpp/yaml.h"
 
-#include "ace_c_basisfunction.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_c_basisfunction.h"
+#include "ace-evaluator/ace_types.h"
 
 
 using namespace std;

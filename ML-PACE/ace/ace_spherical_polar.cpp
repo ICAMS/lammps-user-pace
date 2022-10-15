@@ -1,7 +1,7 @@
 #include <cmath>
 #include <iostream>
 
-#include "ace_spherical_polar.h"
+#include "ace/ace_spherical_polar.h"
 #include <sstream>
 /**
 Constructor for SHarmonics. Dynamically initialises all the arrays.

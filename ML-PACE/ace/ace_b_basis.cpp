@@ -1,16 +1,16 @@
 //
 // Created by Yury Lysogorskiy on 16.03.2020.
 //
-#include "ace_b_basis.h"
+#include "ace/ace_b_basis.h"
 
 #include <algorithm>
 #include <sstream>
 
 
-#include "ace_yaml_input.h"
-#include "ace_couplings.h"
-#include "ace_c_basis.h"
-#include "ace_utils.h"
+#include "ace/ace_yaml_input.h"
+#include "ace/ace_couplings.h"
+#include "ace-evaluator/ace_c_basis.h"
+#include "ace-evaluator/ace_utils.h"
 
 void group_basis_functions_by_index(const vector<ACEBBasisFunction> &basis,
                                     Basis_functions_map &basis_functions_map) {

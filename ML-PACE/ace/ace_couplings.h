@@ -7,10 +7,10 @@
 #include <string>
 #include <sstream>
 
-#include "ace_types.h"
-#include "ace_b_basisfunction.h"
-#include "ace_clebsch_gordan.h"
-#include "ace_c_basisfunction.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace/ace_b_basisfunction.h"
+#include "ace/ace_clebsch_gordan.h"
+#include "ace-evaluator/ace_c_basisfunction.h"
 
 
 struct ms_cg_pair {

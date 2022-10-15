@@ -2,17 +2,17 @@
 // Created by Yury Lysogorskiy on 28.02.20.
 //
 
-#include "ace_b_basisfunction.h"
+#include "ace/ace_b_basisfunction.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <sstream>
 
 
-#include "ace_b_basis.h"
-#include "ace_clebsch_gordan.h"
-#include "ace_couplings.h"
-#include "ace_utils.h"
+#include "ace/ace_b_basis.h"
+#include "ace/ace_clebsch_gordan.h"
+#include "ace/ace_couplings.h"
+#include "ace-evaluator/ace_utils.h"
 
 ACEClebschGordan clebsch_gordan(10);
 

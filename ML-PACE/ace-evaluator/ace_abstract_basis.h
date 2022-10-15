@@ -36,11 +36,11 @@
 #include <map>
 #include <tuple>
 
-#include "ace_c_basisfunction.h"
-#include "ace_contigous_array.h"
-#include "ace_radial.h"
-#include "ace_spherical_cart.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_c_basisfunction.h"
+#include "ace-evaluator/ace_contigous_array.h"
+#include "ace-evaluator/ace_radial.h"
+#include "ace-evaluator/ace_spherical_cart.h"
+#include "ace-evaluator/ace_types.h"
 
 using namespace std;
 

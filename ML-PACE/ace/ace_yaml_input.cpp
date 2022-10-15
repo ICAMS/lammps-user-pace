@@ -1,4 +1,4 @@
-#include "ace_yaml_input.h"
+#include "ace/ace_yaml_input.h"
 
 #include <algorithm>
 #include <iostream>
@@ -7,7 +7,7 @@
 
 #include "yaml-cpp/yaml.h"
 
-#include "ace_couplings.h"
+#include "ace/ace_couplings.h"
 
 using namespace std;
 

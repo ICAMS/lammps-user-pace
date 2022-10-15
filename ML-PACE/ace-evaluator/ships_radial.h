@@ -31,9 +31,9 @@
 #ifndef SHIPs_RADIAL_FUNCTIONS_H
 #define SHIPs_RADIAL_FUNCTIONS_H
 
-#include "ace_arraynd.h"
-#include "ace_types.h"
-#include "ace_radial.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_types.h"
+#include "ace-evaluator/ace_radial.h"
 #include <yaml-cpp/yaml.h>
 
 class SHIPsRadPolyBasis {

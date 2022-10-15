@@ -35,9 +35,9 @@
 #include <stdexcept>
 #include <string>
 
-#include "ace_arraynd.h"
-#include "ace_contigous_array.h"
-#include "ace_types.h"
+#include "ace-evaluator/ace_arraynd.h"
+#include "ace-evaluator/ace_contigous_array.h"
+#include "ace-evaluator/ace_types.h"
 
 using namespace std;
 

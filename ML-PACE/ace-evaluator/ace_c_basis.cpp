@@ -28,8 +28,8 @@
 // Created by Yury Lysogorskiy on 1.04.20.
 #include <fstream>
 
-#include "ace_c_basis.h"
-#include "ships_radial.h"
+#include "ace-evaluator/ace_c_basis.h"
+#include "ace-evaluator/ships_radial.h"
 
 using namespace std;
 
