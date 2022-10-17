@@ -41,3 +41,28 @@ For more information see [here](https://lammps.sandia.gov/doc/Build_cmake.html).
    
 3. Build LAMMPS using `cmake --build .` or `make`
 
+
+### Build for lammps compute
+
+* First download lammps branch with PACE compute and FitSNAP
+
+git clone -b compute-pace git@github.com:jmgoff/lammps_compute_PACE.git
+cd lammps_compute_PACE
+mkdir build && cd build
+
+cmake -D LAMMPS_EXCEPTIONS=on -D PKG_PYTHON=on -D BUILD_SHARED_LIBS=on -D CMAKE_BUILD_TYPE=Debug -D PKG_ML-IAP=on -D PKG_ML-PACE=on -D PKG_ML-SNAP=on -D BUILD_MPI=on -D BUILD_OMP=off  -D CMAKE_INSTALL_PREFIX=<$HOME>/.local -D PKG_MOLECULE=on ../cmake/
+
+* Next, download this modified lammps-user-pace repo that contains extra arrays for breaking out descriptor contributions
+git clone git@github.com:jmgoff/lammps-user-pace-1.git
+cp lammps-user-pace-1/ML-PACE/ace-evaluator/ace_evaluator.* ./lammps-user-pace-v.2022.09.27/ML-PACE/ace-evaluator/
+
+make -j
+make install
+
+* Now, set up paths
+INSTALL_PATH=CMAKE_INSTALL_PREFIX/.local
+export PYTHONPATH=$PYTHONPATH:$INSTALL_PATH/lib/python3.<version>/site-packages
+export PYTHONPATH=$PYTHONPATH:$INSTALL_PATH/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$INSTALL_PATH/lib
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/<path>/<to>/<lammps>/build
+
