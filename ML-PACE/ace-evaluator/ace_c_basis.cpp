@@ -29,7 +29,7 @@
 #include <fstream>
 
 #include "ace-evaluator/ace_c_basis.h"
-#include "ace-evaluator/ships_radial.h"
+#include "ace-evaluator/acejl_radial.h"
 
 using namespace std;
 
@@ -679,7 +679,7 @@ void ACECTildeBasisSet::load(const string filename) {
     if (radbasename == "ChebExpCos" | radbasename == "ChebPow") {
         _load_radial_ACERadial(fptr, filename, radbasename);
     } else if (radbasename == "ACE.jl.Basic") {
-        _load_radial_SHIPsBasic(fptr, filename, radbasename);
+        _load_radial_ACEjlBasic(fptr, filename, radbasename);
     } else {
         throw invalid_argument(
                 ("File '" + filename + "': I don't know how to read radbasename = " + radbasename).c_str());
@@ -1014,54 +1014,10 @@ void ACECTildeBasisSet::_load_radial_ACERadial(FILE *fptr,
         }
 }
 
-void ACECTildeBasisSet::_load_radial_SHIPsBasic(FILE *fptr,
+void ACECTildeBasisSet::_load_radial_ACEjlBasic(FILE *fptr,
                                                 const string filename,
                                                 const string radbasename) {
-    // create a radial basis object, and read it from the file pointer
-    SHIPsRadialFunctions *ships_radial_functions = new SHIPsRadialFunctions();
-
-    ships_radial_functions->nelements = nelements;
-    ships_radial_functions->radbasis.init(nelements, nelements, "SHIPsRadialFunctions::radbasis");
-    ships_radial_functions->fread(fptr);
-
-    _post_load_radial_SHIPsBasic(ships_radial_functions);
-}
-
-void ACECTildeBasisSet::_post_load_radial_SHIPsBasic(
-        SHIPsRadialFunctions *ships_radial_functions) {//mimic ships_radial_functions to ACERadialFunctions
-    ships_radial_functions->nradial = ships_radial_functions->get_maxn();
-    ships_radial_functions->nradbase = ships_radial_functions->get_maxn();
-
-    nradbase = ships_radial_functions->get_maxn();
-    nradmax = ships_radial_functions->get_maxn();
-    cutoffmax = ships_radial_functions->get_rcut();
-    deltaSplineBins = 0.001;
-
-    ships_radial_functions->nradbase = nradbase;
-    ships_radial_functions->lmax = lmax;
-    ships_radial_functions->nradial = nradmax;
-    ships_radial_functions->gr.init(nradbase, "gr");
-    ships_radial_functions->dgr.init(nradbase, "dgr");
-
-    ships_radial_functions->fr.init(nradmax, lmax + 1, "fr");
-    ships_radial_functions->dfr.init(nradmax, lmax + 1, "dfr");
-    ships_radial_functions->crad.init(nelements, nelements, nradmax, (lmax + 1), nradbase, "crad");
-    ships_radial_functions->crad.fill(0.);
-
-
-    if (radial_functions) delete radial_functions;
-    radial_functions = ships_radial_functions;
-    radial_functions->prehc.fill(0);
-    radial_functions->lambdahc.fill(1);
-    radial_functions->lambda.fill(0);
-
-    radial_functions->cut.init(nelements, nelements, "cut");
-    radial_functions->dcut.init(nelements, nelements, "dcut");
-
-    radial_functions->cut.fill(ships_radial_functions->get_rcut());
-    radial_functions->dcut.fill(0);
-
-    radial_functions->crad.fill(0);
+    throw runtime_error("_load_radial_ACEjlBasic is deprecated");
 }
 
 vector<vector<SPECIES_TYPE>> ACECTildeBasisSet::get_all_coeffs_mask() const {
@@ -1240,18 +1196,18 @@ void ACECTildeBasisSet::load_yaml(const string &yaml_file_name) {
     this->cutoffmax = 0;
 
     // check, if bonds::[]::radbasename=="ACE.jl.radbase"
-    bool ACE_jl_radbase = false;
+    bool ACEjl_radbase = false;
     bool PACE_radbase = false;
     for (const auto &p: yaml_map_bond_specifications) {
         auto bond_yaml = p.second;
         string radbasename = bond_yaml["radbasename"].as<string>();
         if (radbasename.rfind("ACE.jl", 0) == 0)
-            ACE_jl_radbase = true;
+            ACEjl_radbase = true;
         else
             PACE_radbase = true;
     }
     // check if both type of radbase -> inconsistency
-    if (ACE_jl_radbase & PACE_radbase) {
+    if (ACEjl_radbase & PACE_radbase) {
         throw invalid_argument(
                 "Only ACE.jl.* or PACE's radial basis are possible, but both types are used simultaneously.");
     }
@@ -1322,19 +1278,41 @@ void ACECTildeBasisSet::load_yaml(const string &yaml_file_name) {
             }
         }
         ///////////////////////////////////////////////////////////////////
-    } else if (ACE_jl_radbase) {
+    } else if (ACEjl_radbase) {
         ///////////////////////////////////////////////////////////////////
-        //read  lmax from YACE
-        if (ctilde_basis_yaml["lmax"])
-            this->lmax = ctilde_basis_yaml["lmax"].as<LS_TYPE>();
-        else
-            throw invalid_argument(
-                    "For `ACE.jl.*` radbase functions, `lmax` should be provided in the YACE separately.");
-        // no need to store map_bond_specifications, only SHIPsRadialFunctions
-        SHIPsRadialFunctions *ships_radial_functions = new SHIPsRadialFunctions();
-        ships_radial_functions->init(nelements);
-        ships_radial_functions->read_yaml(ctilde_basis_yaml);
-        _post_load_radial_SHIPsBasic(ships_radial_functions);
+
+        lmax = ctilde_basis_yaml["lmax"].as<LS_TYPE>();
+
+        // loop through bonds once to get what is needed for `init`
+        // (remaining information is extracted later in read_yaml)
+        vector<vector<string>> radbasename_ij(nelements, vector<string>(nelements));
+        cutoffmax = 0.0;
+        nradmax = 0;
+        nradbase = 0;
+        for (const auto &p: yaml_map_bond_specifications) {
+            pair<SPECIES_TYPE, SPECIES_TYPE> bond_pair = make_pair(p.first[0], p.first[1]);
+            auto bond_yaml = p.second;
+            radbasename_ij.at(bond_pair.first).at(bond_pair.second) = bond_yaml["radbasename"].as<string>();
+            if (bond_yaml["rcut"].as<DOUBLE_TYPE>() > cutoffmax)
+                cutoffmax = bond_yaml["rcut"].as<DOUBLE_TYPE>();
+            if (bond_yaml["nradial"].as<NS_TYPE>() > nradmax) {
+                nradmax = bond_yaml["nradial"].as<NS_TYPE>();
+                nradbase = bond_yaml["nradial"].as<NS_TYPE>();
+            }
+        }
+
+        // create and initialize acejl_radial_functions
+        ACEjlRadialFunctions* acejl_radial_functions = new ACEjlRadialFunctions();
+        acejl_radial_functions->init(nradbase, lmax, nradmax,
+                                     -1.0, nelements, radbasename_ij);
+
+        // read remaining information from yaml
+        acejl_radial_functions->read_yaml(ctilde_basis_yaml);
+
+        // make radial_functions point to the acejl basis
+        if (radial_functions) delete radial_functions;
+        radial_functions = acejl_radial_functions;
+
     }
     ///////////////////////////////////////////////////////////////////
 
