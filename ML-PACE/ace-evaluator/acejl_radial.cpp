@@ -55,7 +55,7 @@ void ACEjlRadialFunctions::read_yaml(YAML_PACE::Node node) {
     
         // set up spline interpolator (see SplineInterpolator::setupSplines)
         // note that for SplineInterpolators, ntot=nlut is defined such 
-        // that if r/delta>=ntot then f(r/delta)=0
+        // that if r*rscalelookup>=ntot then f(r/delta)=0
         SplineInterpolator& spl = splines(mu_i, mu_j);
         spl.cutoff = cut(mu_i,mu_j);
         spl.ntot = nbins;
@@ -68,7 +68,7 @@ void ACEjlRadialFunctions::read_yaml(YAML_PACE::Node node) {
         spl.rscalelookup = (DOUBLE_TYPE) spl.nlut / spl.cutoff;
         spl.invrscalelookup = 1.0 / spl.rscalelookup;
         spl.lookupTable.init(spl.ntot+1, spl.num_of_functions, 4);
-        for (int n=0; n<spl.nlut-1; ++n) {
+        for (int n=0; n<spl.nlut; ++n) {
             for (int func_id=0; func_id<spl.num_of_functions; func_id++) {
                 const auto d = spl.deltaSplineBins;
                 DOUBLE_TYPE f0 = splinenodalvals[func_id][n];
