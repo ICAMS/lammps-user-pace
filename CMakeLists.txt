@@ -47,4 +47,5 @@ add_library(pace STATIC ${PACE_EVALUATOR_SOURCES} ${PACE_SOURCES})
 target_include_directories(pace PUBLIC ${PACE_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR})
 target_include_directories(pace PRIVATE ${CNPY_INCLUDE_PATH} ${WIGNER_INCLUDE_PATH})
 target_compile_definitions(pace PUBLIC EXTRA_C_PROJECTIONS) # important for B-projections and extrapolation grade calculations
+target_compile_definitions(pace PUBLIC COMPUTE_B_GRAD) # important for gradients of B-projections and ctilde functions
 target_link_libraries(pace PRIVATE yaml-cpp-pace cnpy-static)
