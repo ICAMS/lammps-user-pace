@@ -82,6 +82,13 @@ void ACEjlRadialFunctions::read_yaml(YAML_PACE::Node node) {
                 spl.lookupTable(n,func_id,3) = -2.0*(f1-f0)+f1d1+f0d1;
             }
         }
+        // haven't yet set the last element in the lookup table; set to zero
+        for (int func_id=0; func_id<spl.num_of_functions; func_id++) {
+            spl.lookupTable(spl.nlut,func_id,0) = 0.0;
+            spl.lookupTable(spl.nlut,func_id,1) = 0.0;
+            spl.lookupTable(spl.nlut,func_id,2) = 0.0;
+            spl.lookupTable(spl.nlut,func_id,3) = 0.0;
+        }
     }
 }
 
