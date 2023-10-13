@@ -44,9 +44,6 @@ class ACEBEvaluator : public ACEEvaluator {
 
     void init(ACEBBasisSet *basis_set);
 
-    // active sets
-    map<SPECIES_TYPE, Array2D<DOUBLE_TYPE>> A_active_set_inv;
-
     bool is_linear_extrapolation_grade = true;
 
     void resize_projections();
@@ -56,6 +53,9 @@ class ACEBEvaluator : public ACEEvaluator {
     void validate_ASI_shape(const string &element_name, SPECIES_TYPE st, const vector<size_t> &shape);
 
 public:
+
+    // active sets
+    map<SPECIES_TYPE, Array2D<DOUBLE_TYPE>> A_active_set_inv;
 
     ACEBEvaluator() = default;
 
