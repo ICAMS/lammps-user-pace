@@ -208,7 +208,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     ACECTildeBasisFunction *basis = basis_set->basis[mu_i];
 
     DOUBLE_TYPE rho_cut, drho_cut, fcut, dfcut;
-    DOUBLE_TYPE dF_drho_core;
+    DOUBLE_TYPE dF_drho_core, dF_dfcut;
 
     //TODO: lmax -> lmaxi (get per-species type)
     const LS_TYPE lmaxi = basis_set->lmax;
@@ -233,7 +233,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     dF_drho.fill(0);
 
 #ifdef EXTRA_C_PROJECTIONS
-    if(this->compute_projections) {
+    if (this->compute_projections) {
         projections.init(total_basis_size_rank1 + total_basis_size, "projections");
         projections.fill(0.0);
     }
@@ -262,6 +262,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     int jj_actual = 0;
     SPECIES_TYPE type_j = 0;
     Array1D<int> neighbour_index_mapping(jnum); // jj_actual -> jj
+    // minimal distance, nearest neighbour
+    int jj_min_actual = -1, j_min = -1;
+    DOUBLE_TYPE d, dmin = basis_set->cutoffmax;
+    bool is_zbl = basis_set->radial_functions->inner_cutoff_type == "zbl";
+    const auto &cut_in = basis_set->radial_functions->cut_in;
+    const auto &dcut_in = basis_set->radial_functions->dcut_in;
     //loop over neighbours, compute distance, consider only atoms within with r<cutoff(mu_i, mu_j)
     for (jj = 0; jj < jnum; ++jj) {
 
@@ -280,7 +286,14 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
         if (r_xyz >= current_cutoff)
             continue;
-
+        if (is_zbl) {
+            d = r_xyz - (cut_in(mu_i, mu_j) - dcut_in(mu_i, mu_j));
+            if (d < dmin) {
+                dmin = d;
+                jj_min_actual = jj_actual;
+                j_min = j;
+            }
+        }
         inv_r_norm = 1 / r_xyz;
 
         r_norms(jj_actual) = r_xyz;
@@ -348,7 +361,6 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         //hard-core repulsion
         rho_core += basis_set->radial_functions->cr;
         DCR_cache(jj) = basis_set->radial_functions->dcr;
-
     } //end loop over neighbours
 
     //complex conjugate A's (for NEGATIVE (-m) terms)
@@ -390,7 +402,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             rhos(p) += func->ctildes[p] * A_cur;
         }
 #ifdef EXTRA_C_PROJECTIONS
-        if(this->compute_projections) {
+        if (this->compute_projections) {
             //aggregate C-projections separately
             // always take 0-th density, because Ctilde evalutor has no rotationally invariant B-projections, only A-products
             projections(func_rank1_ind) += func->ctildes[0] * A_cur;
@@ -465,7 +477,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 #endif
             }
 #ifdef EXTRA_C_PROJECTIONS
-            if(this->compute_projections) {
+            if (this->compute_projections) {
                 //aggregate C-projections separately
                 // always take 0-th density, because Ctilde evalutor has no rotationally invariant B-projections, only A-products
                 projections(total_basis_size_rank1 + func_ind) += B.real_part_product(func->ctildes[ms_ind * ndensity]);
@@ -485,19 +497,39 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
     rho_cut = basis_set->map_embedding_specifications.at(mu_i).rho_core_cutoff;
     drho_cut = basis_set->map_embedding_specifications.at(mu_i).drho_core_cutoff;
 
-    basis_set->inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
     basis_set->FS_values_and_derivatives(rhos, evdwl, dF_drho, mu_i);
 #ifdef DEBUG_ENERGY_CALCULATIONS
     printf("ACE = %f, rho_core = %f, fcut=%f\n",evdwl, rho_core, fcut);
 #endif
-    dF_drho_core = evdwl * dfcut + 1;
+    if (is_zbl) {
+        DOUBLE_TYPE transition_coordinate = 0;
+        if (j_min != -1) {
+            SPECIES_TYPE mu_jmin = type[j_min];
+            if (is_element_mapping)
+                mu_jmin = element_type_mapping(mu_jmin);
+            DOUBLE_TYPE dcutin = basis_set->radial_functions->dcut_in(mu_i, mu_jmin);
+            transition_coordinate = dcutin - dmin; // == cutin - r_min
+            cutoff_func_poly(transition_coordinate, dcutin, dcutin, fcut, dfcut);
+            dfcut = -dfcut; // invert, because rho_core = cutin - r_min
+        } else {
+            // no neighbours
+            fcut = 1;
+            dfcut = 0;
+        }
+        evdwl_cut = evdwl * fcut + rho_core * (1 - fcut); // evdwl * fcut + rho_core_uncut  - rho_core_uncut* fcut
+        dF_drho_core = 1 - fcut;
+        dF_dfcut = evdwl * dfcut - rho_core * dfcut;
+    } else {
+        basis_set->inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
+        evdwl_cut = evdwl * fcut + rho_core;
+        dF_drho_core = evdwl * dfcut + 1;
+    }
     for (DENSITY_TYPE p = 0; p < ndensity; ++p)
         dF_drho(p) *= fcut;
-    evdwl_cut = evdwl * fcut + rho_core;
 #ifdef DEBUG_ENERGY_CALCULATIONS
     printf("ACE_cut = %f\n",evdwl_cut);
 #endif
-    // E0 shift 
+    // E0 shift
     evdwl_cut += basis_set->E0vals(mu_i);
 #ifdef DEBUG_ENERGY_CALCULATIONS
     printf("E_total(+E0) = %f\n",evdwl_cut);
@@ -519,7 +551,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 #ifdef COMPUTE_B_GRAD
         if (this->compute_b_grad) {
             //actually, it is always += 1, due to CG for r=1
-            weights_rank1_dB(f_ind, func->mus[0], func->ns[0] - 1) +=  func->ctildes[0];
+            weights_rank1_dB(f_ind, func->mus[0], func->ns[0] - 1) += func->ctildes[0];
         }
 #endif
     }
@@ -728,6 +760,14 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
         f_ji[0] += dF_drho_core * DCR * r_hat[0];
         f_ji[1] += dF_drho_core * DCR * r_hat[1];
         f_ji[2] += dF_drho_core * DCR * r_hat[2];
+        if (is_zbl) {
+            if (jj == jj_min_actual) {
+                // DCRU = 1.0
+                f_ji[0] += dF_dfcut * r_hat[0];
+                f_ji[1] += dF_dfcut * r_hat[1];
+                f_ji[2] += dF_dfcut * r_hat[2];
+            }
+        }
 #ifdef PRINT_INTERMEDIATE_VALUES
         printf("with core-repulsion\n");
         printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,

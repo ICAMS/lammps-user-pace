@@ -163,7 +163,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     auto basis = basis_set->basis[mu_i];
 
     DOUBLE_TYPE rho_cut, drho_cut, fcut, dfcut;
-    DOUBLE_TYPE dF_drho_core;
+    DOUBLE_TYPE dF_drho_core, dF_dfcut;
 
     //TODO: lmax -> lmaxi (get per-species type)
     const LS_TYPE lmaxi = basis_set->lmax;
@@ -188,7 +188,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     dF_drho.fill(0);
 
 #ifdef EXTRA_C_PROJECTIONS
-    if(this->compute_projections) {
+    if (this->compute_projections) {
         projections.init(total_basis_size_rank1 + total_basis_size, "projections");
         projections.fill(0);
         dE_dc.init((total_basis_size_rank1 + total_basis_size) * this->basis_set->ndensitymax, "dE_dc");
@@ -219,6 +219,12 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     int jj_actual = 0;
     SPECIES_TYPE type_j = 0;
     Array1D<int> neighbour_index_mapping(jnum); // jj_actual -> jj
+    // minimal distance, nearest neighbour
+    int jj_min_actual = -1, j_min = -1;
+    DOUBLE_TYPE d, dmin = basis_set->cutoffmax;
+    bool is_zbl = basis_set->radial_functions->inner_cutoff_type == "zbl";
+    const auto& cut_in = basis_set->radial_functions->cut_in;
+    const auto& dcut_in = basis_set->radial_functions->dcut_in;
     //loop over neighbours, compute distance, consider only atoms within with r<cutoff(mu_i, mu_j)
     for (jj = 0; jj < jnum; ++jj) {
 
@@ -237,6 +243,14 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 
         if (r_xyz >= current_cutoff)
             continue;
+        if (is_zbl) {
+            d = r_xyz - (cut_in(mu_i, mu_j) - dcut_in(mu_i, mu_j));
+            if (d < dmin) {
+                dmin = d;
+                jj_min_actual = jj_actual;
+                j_min = j;
+            }
+        }
 
         inv_r_norm = 1 / r_xyz;
 
@@ -249,8 +263,8 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         neighbour_index_mapping(jj_actual) = jj;
         jj_actual++;
     }
-
     int jnum_actual = jj_actual;
+
 
     //ALGORITHM 1: Atomic base A
     for (jj = 0; jj < jnum_actual; ++jj) {
@@ -305,7 +319,6 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         //hard-core repulsion
         rho_core += basis_set->radial_functions->cr;
         DCR_cache(jj) = basis_set->radial_functions->dcr;
-
     } //end loop over neighbours
 
     //complex conjugate A's (for NEGATIVE (-m) terms)
@@ -342,7 +355,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         printf("A_r=1(x=%d, n=%d)=(%f)\n", func->mus[0], func->ns[0], A_cur);
 #endif
 #ifdef EXTRA_C_PROJECTIONS
-        if(this->compute_projections) {
+        if (this->compute_projections) {
             //aggregate C-projections separately
             projections(func_rank1_ind) += A_cur;
         }
@@ -409,7 +422,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 #endif
             }
 #ifdef EXTRA_C_PROJECTIONS
-            if(this->compute_projections) {
+            if (this->compute_projections) {
                 //aggregate C-projections separately
                 projections(total_basis_size_rank1 + func_ind) += B.real_part_product(func->gen_cgs[ms_ind]);
             }
@@ -436,12 +449,11 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     rho_cut = basis_set->map_embedding_specifications.at(mu_i).rho_core_cutoff;
     drho_cut = basis_set->map_embedding_specifications.at(mu_i).drho_core_cutoff;
 
-    ACEBBasisSet::inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
     basis_set->FS_values_and_derivatives(rhos, evdwl, dF_drho, mu_i);
 
 #ifdef EXTRA_C_PROJECTIONS
     //compute dE_dc only optionally
-    if(this->compute_projections && ! is_linear_extrapolation_grade) {
+    if (this->compute_projections && !is_linear_extrapolation_grade) {
         int projections_size = projections.get_size();
         int dE_dc_ind = 0;
         for (DENSITY_TYPE p = 0; p < ndensity; p++) {
@@ -450,10 +462,32 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         }
     }
 #endif
-    dF_drho_core = evdwl * dfcut + 1;
+
+    if (is_zbl) {
+        DOUBLE_TYPE transition_coordinate = 0;
+        if (j_min != -1) {
+            SPECIES_TYPE mu_jmin = type[j_min];
+            if (is_element_mapping)
+                mu_jmin = element_type_mapping(mu_jmin);
+            DOUBLE_TYPE dcutin = basis_set->radial_functions->dcut_in(mu_i, mu_jmin);
+            transition_coordinate =  dcutin  - dmin; // == cutin - r_min
+            cutoff_func_poly(transition_coordinate, dcutin, dcutin, fcut, dfcut);
+            dfcut = -dfcut; // invert, because rho_core = cutin - r_min
+        } else {
+            // no neighbours
+            fcut = 1;
+            dfcut = 0;
+        }
+        evdwl_cut = evdwl * fcut + rho_core * (1 - fcut); // evdwl * fcut + rho_core_uncut  - rho_core_uncut* fcut
+        dF_drho_core = 1 - fcut;
+        dF_dfcut = evdwl * dfcut - rho_core * dfcut;
+    } else {
+        basis_set->inner_cutoff(rho_core, rho_cut, drho_cut, fcut, dfcut);
+        evdwl_cut = evdwl * fcut + rho_core;
+        dF_drho_core = evdwl * dfcut + 1;
+    }
     for (DENSITY_TYPE p = 0; p < ndensity; ++p)
         dF_drho(p) *= fcut;
-    evdwl_cut = evdwl * fcut + rho_core;
 
 #ifdef DEBUG_FORCES_CALCULATIONS
     printf("dFrhos = ");
@@ -681,6 +715,14 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         f_ji[0] += dF_drho_core * DCR * r_hat[0];
         f_ji[1] += dF_drho_core * DCR * r_hat[1];
         f_ji[2] += dF_drho_core * DCR * r_hat[2];
+        if(is_zbl) {
+            if(jj==jj_min_actual) {
+                // DCRU = 1.0
+                f_ji[0] += dF_dfcut * r_hat[0];
+                f_ji[1] += dF_dfcut * r_hat[1];
+                f_ji[2] += dF_dfcut * r_hat[2];
+            }
+        }
 #ifdef PRINT_INTERMEDIATE_VALUES
         printf("with core-repulsion\n");
         printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
@@ -702,7 +744,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     //energies(i) = evdwl + rho_core;
     e_atom = evdwl_cut;
 #ifdef EXTRA_C_PROJECTIONS
-    if(this->compute_projections) {
+    if (this->compute_projections) {
         //check if active set is loaded
         // use dE_dc or projections as asi_vector
         if (A_active_set_inv.find(mu_i) != A_active_set_inv.end()) {

@@ -25,12 +25,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 //automatically generate source code
 
 #ifndef ACE_MULTIARRAY_H
 #define ACE_MULTIARRAY_H
-
 #include <cstring>
 #include <vector>
 #include <stdexcept>
