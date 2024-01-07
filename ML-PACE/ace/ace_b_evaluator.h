@@ -53,6 +53,7 @@ class ACEBEvaluator : public ACEEvaluator {
     void validate_ASI_shape(const string &element_name, SPECIES_TYPE st, const vector<size_t> &shape);
 
 public:
+
     // active sets
     map<SPECIES_TYPE, Array2D<DOUBLE_TYPE>> A_active_set_inv;
 
@@ -85,6 +86,12 @@ public:
     void set_active_set(const vector<vector<vector<DOUBLE_TYPE>>> &species_type_active_set_inv);
 
     bool get_is_linear_extrapolation_grade() { return this->is_linear_extrapolation_grade; }
+
+    vector<int> get_func_ind_shift() override;
+
+    int get_total_number_of_functions() override;
+
+    vector<int> get_number_of_functions() override;
 };
 
 
