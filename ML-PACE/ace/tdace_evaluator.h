@@ -159,6 +159,14 @@ public:
 
     void convert_to_flatten_arrays();
     void print_functions();
+
+    SPECIES_TYPE get_species_index_by_name(const string &elemname) {
+        for (SPECIES_TYPE t = 0; t < nelements; t++) {
+            if (this->elements_name[t] == elemname)
+                return t;
+        }
+        return -1;
+    }
 };
 
 class TDACEBEvaluator {
