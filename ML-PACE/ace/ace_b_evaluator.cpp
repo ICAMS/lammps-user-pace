@@ -213,8 +213,8 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 
     const Array1D<DOUBLE_TYPE> &gr = basis_set->radial_functions->gr;
     const Array1D<DOUBLE_TYPE> &dgr = basis_set->radial_functions->dgr;
-
-    loop_over_neighbour_timer.start();
+    setup_timer.stop();
+    A_construction_timer.start();
 
     int jj_actual = 0;
     SPECIES_TYPE type_j = 0;
@@ -335,7 +335,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
             }
         }
     }    //now A's are constructed
-    loop_over_neighbour_timer.stop();
+    A_construction_timer.stop();
 
     // ==================== ENERGY ====================
 
