@@ -411,6 +411,7 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
     const DENSITY_TYPE ndensity = basis_set.embedding_specifications.ndensity;
 
     neighbours_forces.resize(jnum, 3);
+    neighbours_forces.fill(0.0);
 
     weights.fill(0);
     A.fill(0);
