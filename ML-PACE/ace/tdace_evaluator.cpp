@@ -5,6 +5,7 @@
 #include "ace-evaluator/ace_types.h"
 #include "ace/ace_yaml_input.h"
 #include "ace-evaluator/ace_radial.h"
+#include "cnpy/cnpy.h"
 
 #define sqr(x) ((x)*(x))
 const DOUBLE_TYPE pi = 3.14159265358979323846264338327950288419; // pi
@@ -406,8 +407,6 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
 
     const SHORT_INT_TYPE total_basis_size = basis_set.basis[mu_i].size();
 
-//    const auto& basis = basis_set.basis[mu_i];
-
     const DENSITY_TYPE ndensity = basis_set.embedding_specifications.ndensity;
 
     neighbours_forces.resize(jnum, 3);
@@ -417,6 +416,14 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
     A.fill(0);
     rhos.fill(0);
     dF_drho.fill(0);
+
+#ifdef EXTRA_C_PROJECTIONS
+    if (this->compute_projections) {
+        projections.init(total_basis_size, "projections");
+        projections.fill(0);
+    }
+#endif
+
     setup_timer.stop();
 
     A_construction_timer.start();
@@ -557,6 +564,12 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
                 dB_flatten(func_ms_t_ind) = dB;
             }
 
+#ifdef EXTRA_C_PROJECTIONS
+            if (this->compute_projections) {
+                //aggregate C-projections separately
+                projections(func_ind) += B * gen_cgs_flatten(gen_cgs_shift + ms_ind);
+            }
+#endif
 
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 //real-part only multiplication
@@ -647,6 +660,30 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
 
     e_atom = basis_set.scale * evdwl + basis_set.shift + basis_set.E0_shift.at(mu_i);
 
+#ifdef EXTRA_C_PROJECTIONS
+    if (this->compute_projections) {
+        //check if active set is loaded
+        // use dE_dc or projections as asi_vector
+        if (A_active_set_inv.find(mu_i) != A_active_set_inv.end()) {
+            Array1D<DOUBLE_TYPE> &asi_vector = this->projections;
+            // get inverted active set for current species type
+            const auto &A_as_inv = A_active_set_inv.at(mu_i);
+
+            DOUBLE_TYPE gamma_max = 0;
+            for (int i = 0; i < A_as_inv.get_dim(0); i++) {
+                DOUBLE_TYPE current_gamma = 0;
+                // compute row-matrix-multiplication asi_vector * A_as_inv (transposed matrix)
+                for (int k = 0; k < asi_vector.get_dim(0); k++)
+                    current_gamma += asi_vector(k) * A_as_inv(i, k);
+
+                if (abs(current_gamma) > gamma_max)
+                    gamma_max = abs(current_gamma);
+            }
+
+            max_gamma_grade = gamma_max;
+        }
+    }
+#endif
     per_atom_calc_timer.stop();
 }
 
@@ -659,6 +696,55 @@ void TDACEBEvaluator::init_timers() {
     weights_and_theta_timer.init();
     setup_timer.init();
 }
+
+
+void TDACEBEvaluator::load_active_set(const string &asi_filename) {
+    cnpy::npz_t asi_npz = cnpy::npz_load(asi_filename);
+    if (asi_npz.size() != this->basis_set.nelements) {
+        stringstream ss;
+        ss << "Number of species types in ASI `" << asi_filename << "` (" << asi_npz.size() << ")";
+        ss << "not equal to number of species in TDACEBBassiSet (" << this->basis_set.nelements << ")";
+        throw std::runtime_error(ss.str());
+    }
+
+    for (auto &kv: asi_npz) {
+        auto element_name = kv.first;
+        SPECIES_TYPE st = this->basis_set.elements_to_index_map.at(element_name);
+        auto shape = kv.second.shape;
+        // auto_determine extrapolation grade type: linear or non-linear
+//        validate_ASI_square_shape(st, shape);
+        if (shape.at(0) != shape.at(1)) {
+            stringstream ss;
+            ss << "Active Set Inverted for element `" << element_name << "`:";
+            ss << "should be square matrix, but has shape (" << shape.at(0) << ", " << shape.at(1) << ")";
+            throw runtime_error(ss.str());
+        }
+//        validate_ASI_shape(element_name, st, shape);
+        int expected_ASI_size = this->basis_set.basis[st].size();
+        if (expected_ASI_size != shape.at(0)) {
+            stringstream ss;
+            ss << "Active Set Inverted for element `" << element_name << "`:";
+            ss << "expected shape: (" << expected_ASI_size << ", " << expected_ASI_size << ") , but has shape ("
+               << shape.at(0) << ", " << shape.at(1) << ")";
+            throw runtime_error(ss.str());
+        }
+
+        Array2D<DOUBLE_TYPE> A0_inv(shape.at(0), shape.at(1), element_name);
+        auto data_vec = kv.second.as_vec<DOUBLE_TYPE>();
+        A0_inv.set_flatten_vector(data_vec);
+        //transpose matrix to speed-up vec-mat multiplication
+        Array2D<DOUBLE_TYPE> A0_inv_transpose(A0_inv.get_dim(1), A0_inv.get_dim(0));
+
+        for (int i = 0; i < A0_inv.get_dim(0); i++)
+            for (int j = 0; j < A0_inv.get_dim(1); j++)
+                A0_inv_transpose(j, i) = A0_inv(i, j);
+
+        this->A_active_set_inv[st] = A0_inv_transpose;
+    }
+
+//    resize_projections();// no need, all projections are the same length
+}
+
 
 void TDACERadialFunction::init() {
 

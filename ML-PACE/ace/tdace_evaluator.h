@@ -204,6 +204,20 @@ public:
      */
     void resize_neighbours_cache(int max_jnum);
 
+#ifdef EXTRA_C_PROJECTIONS
+    bool compute_projections = false;
+    /* 1D array to store projections of basis function (all ranks), shape: [func_ind] */
+    Array1D<DOUBLE_TYPE> projections = Array1D<DOUBLE_TYPE>("projections");
+
+//    Array1D<DOUBLE_TYPE> dE_dc = Array1D<DOUBLE_TYPE>("dE_dc");
+
+    // active sets
+    map<SPECIES_TYPE, Array2D<DOUBLE_TYPE>> A_active_set_inv;
+
+    DOUBLE_TYPE max_gamma_grade = 0;
+
+    void load_active_set(const string &asi_filename);
+#endif
 
     /**
      * Weights \f$ \omega_{i \mu n l m} \f$ for rank > 1, see Eq.(10) from implementation notes,
