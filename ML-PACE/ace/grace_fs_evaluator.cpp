@@ -1,7 +1,7 @@
 //
 // Created by Yury Lysogorskiy on 24.06.24
 //
-#include "ace/tdace_evaluator.h"
+#include "ace/grace_fs_evaluator.h"
 #include "ace-evaluator/ace_types.h"
 #include "ace/ace_yaml_input.h"
 #include "ace-evaluator/ace_radial.h"
@@ -10,7 +10,7 @@
 #define sqr(x) ((x)*(x))
 const DOUBLE_TYPE pi = 3.14159265358979323846264338327950288419; // pi
 
-void TDACEEmbeddingSpecification::from_YAML(YAML_PACE::Node emb_yaml) {
+void GRACEFSEmbeddingSpecification::from_YAML(YAML_PACE::Node emb_yaml) {
     this->type = emb_yaml["type"].as<string>();
     this->FS_parameters = emb_yaml["params"].as<vector<double>>();
     if (this->FS_parameters.size() % 2 == 0)
@@ -21,7 +21,7 @@ void TDACEEmbeddingSpecification::from_YAML(YAML_PACE::Node emb_yaml) {
 //    this->ndensity = emb_yaml["ndensity"].as<DENSITY_TYPE>();
 }
 
-void TDACERadialFunction::from_YAML(YAML_PACE::Node bond_yaml) {
+void GRACEFSRadialFunction::from_YAML(YAML_PACE::Node bond_yaml) {
 
     this->radbasename = bond_yaml["radbasename"].as<string>();
 
@@ -40,7 +40,7 @@ void TDACERadialFunction::from_YAML(YAML_PACE::Node bond_yaml) {
     this->crad.set_flatten_vector(crad_flat);
 
     auto Z_flat = bond_yaml["Z"].as<vector<DOUBLE_TYPE>>();
-    this->Z.init(Z_shape[0], Z_shape[1]);
+    this->Z.init(Z_shape[0], Z_shape[1], "Z");
     Z.set_flatten_vector(Z_flat);
 
 
@@ -51,7 +51,7 @@ void TDACERadialFunction::from_YAML(YAML_PACE::Node bond_yaml) {
     if (bond_yaml["dcut_in"]) dcut_in = bond_yaml["dcut_in"].as<DOUBLE_TYPE>();
 }
 
-void TDACEBasisFunction::from_YAML(YAML_PACE::Node node) {
+void GRACEFSBasisFunction::from_YAML(YAML_PACE::Node node) {
     this->mu0 = node["mu0"].as<SPECIES_TYPE>();
 
     this->ns = node["ns"].as<NS_TYPE>();
@@ -73,7 +73,7 @@ void TDACEBasisFunction::from_YAML(YAML_PACE::Node node) {
         throw invalid_argument("ndensity != coeff.size");
 }
 
-void TDACEBasisFunction::print() const {
+void GRACEFSBasisFunction::print() const {
     cout << "TDACEBasisFunction(mu0=" << this->mu0 << ", rank=" << (int) this->rank << endl;
     int rank = this->rank;
 
@@ -85,11 +85,11 @@ void TDACEBasisFunction::print() const {
     cout << ")" << endl;
 }
 
-TDACEBasisSet::TDACEBasisSet(const string &filename) {
+GRACEFSBasisSet::GRACEFSBasisSet(const string &filename) {
     this->load(filename);
 }
 
-void TDACEBasisSet::load(const string &filename) {
+void GRACEFSBasisSet::load(const string &filename) {
     this->filename = filename;
 
     if (!if_file_exist(filename)) {
@@ -122,9 +122,9 @@ void TDACEBasisSet::load(const string &filename) {
     for (const auto &mu_functions_node: YAML_input["functions"]) {
         SPECIES_TYPE mu0 = mu_functions_node.first.as<SPECIES_TYPE>();
         const auto &functions_list = mu_functions_node.second;
-        vector<TDACEBasisFunction> basis_functions_vec;
+        vector<GRACEFSBasisFunction> basis_functions_vec;
         for (const auto &func_node: functions_list) {
-            TDACEBasisFunction func;
+            GRACEFSBasisFunction func;
             func.from_YAML(func_node);
             basis_functions_vec.emplace_back(func);
             if (func.rank > rankmax)
@@ -171,7 +171,7 @@ void TDACEBasisSet::load(const string &filename) {
     else this->scale = 1.0;
 }
 
-void TDACEBasisSet::convert_to_flatten_arrays() {
+void GRACEFSBasisSet::convert_to_flatten_arrays() {
     ranks_flatten.resize(nelements);
     ndensity_flatten.resize(nelements);
     num_ms_combs_flatten.resize(nelements);
@@ -262,9 +262,9 @@ void TDACEBasisSet::convert_to_flatten_arrays() {
     }
 }
 
-void TDACEBasisSet::FS_values_and_derivatives(Array1D<DOUBLE_TYPE> &rhos, DOUBLE_TYPE &value,
-                                              Array1D<DOUBLE_TYPE> &derivatives,
-                                              SPECIES_TYPE mu_i) {
+void GRACEFSBasisSet::FS_values_and_derivatives(Array1D<DOUBLE_TYPE> &rhos, DOUBLE_TYPE &value,
+                                                Array1D<DOUBLE_TYPE> &derivatives,
+                                                SPECIES_TYPE mu_i) {
     DOUBLE_TYPE F, DF = 0, wpre, mexp;
     DENSITY_TYPE ndensity = this->ndensitymax;
 
@@ -283,7 +283,7 @@ void TDACEBasisSet::FS_values_and_derivatives(Array1D<DOUBLE_TYPE> &rhos, DOUBLE
     }
 }
 
-void TDACEBasisSet::print_functions() {
+void GRACEFSBasisSet::print_functions() {
     for (int el = 0; el < nelements; el++) {
         printf("============================= Element: %d =====================\n", el);
         for (const auto &func: basis[el]) {
@@ -292,12 +292,12 @@ void TDACEBasisSet::print_functions() {
     }
 }
 
-void TDACEBEvaluator::set_basis(TDACEBasisSet &basis_set) {
+void GRACEFSBEvaluator::set_basis(GRACEFSBasisSet &basis_set) {
     this->basis_set = basis_set;
     init(this->basis_set);
 }
 
-void TDACEBEvaluator::init(TDACEBasisSet &basis_set) {
+void GRACEFSBEvaluator::init(GRACEFSBasisSet &basis_set) {
     A.init(basis_set.nradmax + 1, basis_set.lmax + 1, "A");
 
     rhos.init(basis_set.ndensitymax, "rhos");
@@ -329,7 +329,7 @@ void TDACEBEvaluator::init(TDACEBasisSet &basis_set) {
 }
 
 
-void TDACEBEvaluator::resize_neighbours_cache(int max_jnum) {
+void GRACEFSBEvaluator::resize_neighbours_cache(int max_jnum) {
     if (R_cache.get_dim(0) < max_jnum) {
 
         //TODO: implement grow
@@ -360,7 +360,7 @@ void TDACEBEvaluator::resize_neighbours_cache(int max_jnum) {
 }
 
 
-void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, const int jnum, const int *jlist) {
+void GRACEFSBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, const int jnum, const int *jlist) {
     per_atom_calc_timer.start();
 
     setup_timer.start();
@@ -382,11 +382,11 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
 
     int j, jj, func_ind, ms_ind;
 
-    DOUBLE_TYPE Y{0}, Y_DR{0.};
-    DOUBLE_TYPE B{0.};
-    DOUBLE_TYPE dB{0};
+    DOUBLE_TYPE Y, Y_DR;
+    DOUBLE_TYPE B;
+    DOUBLE_TYPE dB;
     Array1D<DOUBLE_TYPE> A_cache(basis_set.rankmax);
-    ACEDRealYcomponent grad_phi_nlm{0}, DY{0.};
+    ACEDRealYcomponent grad_phi_nlm, DY;
 
     //size is +1 of max to avoid out-of-boundary array access in double-triangular scheme
     Array1D<DOUBLE_TYPE> A_forward_prod(basis_set.rankmax + 1);
@@ -495,6 +495,8 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
 
         //loop for computing A's
         // for rank > 1
+        //        A_construction_timer2.start();
+
         for (n = 0; n < basis_set.nradmax; n++) {
             auto &A_lm = A(n);
             for (l = 0; l <= basis_set.lmax; l++) {
@@ -512,6 +514,7 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
 
             }
         }
+//        A_construction_timer2.stop();
 
     } //end loop over neighbours
     A_construction_timer.stop();
@@ -687,8 +690,9 @@ void TDACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *t
     per_atom_calc_timer.stop();
 }
 
-void TDACEBEvaluator::init_timers() {
+void GRACEFSBEvaluator::init_timers() {
     A_construction_timer.init();
+    A_construction_timer2.init();
     forces_calc_loop_timer.init();
     energy_calc_timer.init();
     per_atom_calc_timer.init();
@@ -698,7 +702,7 @@ void TDACEBEvaluator::init_timers() {
 }
 
 
-void TDACEBEvaluator::load_active_set(const string &asi_filename) {
+void GRACEFSBEvaluator::load_active_set(const string &asi_filename) {
     cnpy::npz_t asi_npz = cnpy::npz_load(asi_filename);
     if (asi_npz.size() != this->basis_set.nelements) {
         stringstream ss;
@@ -746,7 +750,7 @@ void TDACEBEvaluator::load_active_set(const string &asi_filename) {
 }
 
 
-void TDACERadialFunction::init() {
+void GRACEFSRadialFunction::init() {
 
     gr.init(nradbasemax, "gr");
     dgr.init(nradbasemax, "dgr");
@@ -765,7 +769,7 @@ void TDACERadialFunction::init() {
  * @param rc
  * @param x
  */
-void TDACERadialFunction::simplified_bessel(DOUBLE_TYPE rc, DOUBLE_TYPE x) {
+void GRACEFSRadialFunction::simplified_bessel(DOUBLE_TYPE rc, DOUBLE_TYPE x) {
     if (x < rc) {
         gr(0) = simplified_bessel_aux(x, rc, 0);
         dgr(0) = dsimplified_bessel_aux(x, rc, 0);
@@ -784,8 +788,8 @@ void TDACERadialFunction::simplified_bessel(DOUBLE_TYPE rc, DOUBLE_TYPE x) {
     }
 }
 
-void TDACERadialFunction::radbase(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcut, string radbasename, DOUBLE_TYPE r,
-                                  DOUBLE_TYPE cut_in, DOUBLE_TYPE dcut_in) {
+void GRACEFSRadialFunction::radbase(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcut, string radbasename, DOUBLE_TYPE r,
+                                    DOUBLE_TYPE cut_in, DOUBLE_TYPE dcut_in) {
     /*lam is given by the formula (24), that contains cut */
     if (r <= cut_in - dcut_in || r >= cut) {
         gr.fill(0);
@@ -799,14 +803,14 @@ void TDACERadialFunction::radbase(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE 
     }
 }
 
-void TDACERadialFunction::all_radfunc(DOUBLE_TYPE r) {
+void GRACEFSRadialFunction::all_radfunc(DOUBLE_TYPE r) {
 
     // set up radial functions
     radbase(rad_lamba, rcut, dcut, radbasename, r, 0, 0); //update gr, dgr
     radfunc(); // update fr(nr, l),  dfr(nr, l)
 }
 
-void TDACERadialFunction::radfunc() {
+void GRACEFSRadialFunction::radfunc() {
     DOUBLE_TYPE frval, dfrval;
     for (NS_TYPE n = 0; n < nradmax; n++) {
         for (LS_TYPE l = 0; l <= lmax; l++) {
@@ -824,10 +828,10 @@ void TDACERadialFunction::radfunc() {
     }
 }
 
-void TDACERadialFunction::setuplookupRadspline() {
+void GRACEFSRadialFunction::setuplookupRadspline() {
     using namespace std::placeholders;
     splines_gk.setupSplines(gr.get_size(),
-                            std::bind(&TDACERadialFunction::radbase, this, this->rad_lamba,
+                            std::bind(&GRACEFSRadialFunction::radbase, this, this->rad_lamba,
                                       this->rcut, this->dcut,
                                       this->radbasename,
                                       _1, 0, 0),//update gr, dgr
@@ -835,12 +839,12 @@ void TDACERadialFunction::setuplookupRadspline() {
                             dgr.get_data(), deltaSplineBins, this->rcut);
 
     splines_rnl.setupSplines(fr.get_size(),
-                             std::bind(&TDACERadialFunction::all_radfunc, this, _1), // update fr(nr, l),  dfr(nr, l)
+                             std::bind(&GRACEFSRadialFunction::all_radfunc, this, _1), // update fr(nr, l),  dfr(nr, l)
                              fr.get_data(),
                              dfr.get_data(), deltaSplineBins, rcut);
 }
 
-void TDACERadialFunction::evaluate(DOUBLE_TYPE r, SPECIES_TYPE mu_i, SPECIES_TYPE mu_j) {
+void GRACEFSRadialFunction::evaluate(DOUBLE_TYPE r, SPECIES_TYPE mu_i, SPECIES_TYPE mu_j) {
     splines_gk.calcSplines(r);
     for (NS_TYPE nr = 0; nr < nradbasemax; nr++) {
         gr(nr) = splines_gk.values(nr);

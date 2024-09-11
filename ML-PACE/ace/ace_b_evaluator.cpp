@@ -106,6 +106,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
         throw std::invalid_argument("ACEBEvaluator: basis set is not assigned");
     }
     per_atom_calc_timer.start();
+    setup_timer.start();
     DOUBLE_TYPE evdwl = 0, evdwl_cut = 0, rho_core = 0;
     DOUBLE_TYPE r_norm;
     DOUBLE_TYPE xn, yn, zn, r_xyz;
@@ -214,7 +215,6 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     const Array1D<DOUBLE_TYPE> &gr = basis_set->radial_functions->gr;
     const Array1D<DOUBLE_TYPE> &dgr = basis_set->radial_functions->dgr;
     setup_timer.stop();
-    A_construction_timer.start();
 
     int jj_actual = 0;
     SPECIES_TYPE type_j = 0;
@@ -267,6 +267,8 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 
 
     //ALGORITHM 1: Atomic base A
+    A_construction_timer.start();
+
     for (jj = 0; jj < jnum_actual; ++jj) {
         r_norm = r_norms(jj);
         mu_j = elements(jj);

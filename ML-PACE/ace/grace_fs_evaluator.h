@@ -2,8 +2,8 @@
 // Created by Yury Lysogorskiy on 24.06.24
 //
 
-#ifndef PYACE_TDACE_EVALUATOR_H
-#define PYACE_TDACE_EVALUATOR_H
+#ifndef GRACE_FS_EVALUATOR_H
+#define GRACE_FS_EVALUATOR_H
 
 #include "ace-evaluator/ace_arraynd.h"
 #include "ace-evaluator/ace_array2dlm.h"
@@ -17,7 +17,7 @@
 
 #include "yaml-cpp/yaml.h"
 
-struct TDACEBasisFunction {
+struct GRACEFSBasisFunction {
     SPECIES_TYPE mu0 = 0;
 
     RANK_TYPE rank = 0;
@@ -35,7 +35,7 @@ struct TDACEBasisFunction {
 
 };
 
-struct TDACEEmbeddingSpecification {
+struct GRACEFSEmbeddingSpecification {
     DENSITY_TYPE ndensity;
     vector<DOUBLE_TYPE> FS_parameters; ///< parameters for cluster functional, see Eq.(3) in implementation notes or Eq.(53) in <A HREF="https://journals.aps.org/prb/abstract/10.1103/PhysRevB.99.014104">  PRB 99, 014104 (2019) </A>
     string type = "FinnisSinclairShiftedScaled"; ///< FS and embedding function combination
@@ -43,7 +43,7 @@ struct TDACEEmbeddingSpecification {
     void from_YAML(YAML_PACE::Node emb_yaml);
 };
 
-class TDACERadialFunction {
+class GRACEFSRadialFunction {
 public:
     SPECIES_TYPE nelemets;
 
@@ -102,7 +102,7 @@ public:
     void radfunc();
 };
 
-class TDACEBasisSet {
+class GRACEFSBasisSet {
 public:
     SPECIES_TYPE nelements = 0;        ///< number of elements in basis set
     RANK_TYPE rankmax = 0;             ///< maximum value of rank
@@ -118,16 +118,16 @@ public:
     int max_dB_array_size;
     DOUBLE_TYPE nnorm = 1.0;
 
-    TDACEEmbeddingSpecification embedding_specifications;
+    GRACEFSEmbeddingSpecification embedding_specifications;
 
     ACECartesianSphericalHarmonics spherical_harmonics;
-    TDACERadialFunction radial_functions;
+    GRACEFSRadialFunction radial_functions;
 
-    vector<vector<TDACEBasisFunction>> basis; // [nelements][nfunctions]
+    vector<vector<GRACEFSBasisFunction>> basis; // [nelements][nfunctions]
 
-    TDACEBasisSet() = default;
+    GRACEFSBasisSet() = default;
 
-    explicit TDACEBasisSet(const string &filename);
+    explicit GRACEFSBasisSet(const string &filename);
 
     void load(const string &filename);
 
@@ -169,7 +169,7 @@ public:
     }
 };
 
-class TDACEBEvaluator {
+class GRACEFSBEvaluator {
 public:
     ///3D array with (l,m) last indices  for storing A's for rank>1: A(n, l, m)
     Array3DLM<DOUBLE_TYPE> A = Array3DLM<DOUBLE_TYPE>("A");
@@ -269,7 +269,7 @@ public:
     Array2D<DOUBLE_TYPE> rhats = Array2D<DOUBLE_TYPE>("rhats");//normalized vector
     Array1D<SPECIES_TYPE> elements = Array1D<SPECIES_TYPE>("elements");
 
-    TDACEBasisSet basis_set;
+    GRACEFSBasisSet basis_set;
 
 
     /**
@@ -282,12 +282,13 @@ public:
      * Initialize internal arrays according to basis set sizes
      * @param basis_set
      */
-    void init(TDACEBasisSet &basis_set);
+    void init(GRACEFSBasisSet &basis_set);
 
-    void set_basis(TDACEBasisSet &basis_set);
+    void set_basis(GRACEFSBasisSet &basis_set);
 
     ACETimer setup_timer;
     ACETimer A_construction_timer; ///< timer for loop over neighbours when constructing A's for single central atom
+    ACETimer A_construction_timer2; ///< timer for loop over neighbours when constructing A's for single central atom
     ACETimer weights_and_theta_timer;
     ACETimer per_atom_calc_timer; ///< timer for single compute_atom call
 
@@ -304,4 +305,4 @@ public:
     void init_timers();
 };
 
-#endif //PYACE_TDACE_EVALUATOR_H
+#endif //GRACE_FS_EVALUATOR_H
