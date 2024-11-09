@@ -49,3 +49,4 @@ target_include_directories(pace PRIVATE ${CNPY_INCLUDE_PATH} ${WIGNER_INCLUDE_PA
 target_compile_definitions(pace PUBLIC EXTRA_C_PROJECTIONS) # important for B-projections and extrapolation grade calculations
 target_compile_definitions(pace PUBLIC COMPUTE_B_GRAD) # important for gradients of B-projections and ctilde functions
 target_link_libraries(pace PRIVATE yaml-cpp-pace cnpy-static)
+install(TARGETS pace LIBRARY DESTINATION lib)
