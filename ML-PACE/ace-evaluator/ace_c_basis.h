@@ -31,7 +31,7 @@
 #define ACE_C_BASIS_H
 
 #include "ace-evaluator/ace_flatten_basis.h"
-#include "ace-evaluator/ships_radial.h"
+#include "ace-evaluator/acejl_radial.h"
 
 typedef vector<vector<ACECTildeBasisFunction>> C_tilde_full_basis_vector2d;
 
@@ -129,7 +129,7 @@ public:
                                 const string filename,
                                 const string radbasename);
 
-    void _load_radial_SHIPsBasic(FILE *fptr,
+    void _load_radial_ACEjlBasic(FILE *fptr,
                                  const string filename,
                                  const string radbasename);
 
@@ -168,8 +168,6 @@ public:
 
     void set_all_coeffs(const vector<DOUBLE_TYPE> &coeffs) override;
 
-
-    void _post_load_radial_SHIPsBasic(SHIPsRadialFunctions *ships_radial_functions);
 };
 
 #endif //ACE_C_BASIS_H
