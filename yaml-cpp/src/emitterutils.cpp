@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <cinttypes>
 
 #include "emitterutils.h"
 #include "exp.h"
