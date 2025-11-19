@@ -9,8 +9,8 @@ from copy import deepcopy
 from itertools import combinations, permutations, combinations_with_replacement, product
 from typing import Dict, List, Union, Tuple
 
-# CLAUDE FIXME how to pybind to ../ML-PACE ???
-from pyace import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
+# Import from compiled C++ extension module
+from lammps_pyace._basis import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
 
 from .basisextension import *
 from .const import *
@@ -684,7 +684,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
 
     if unif_mus_ns_to_lsLScomb_dict is None:
         # Use modern importlib.resources instead of deprecated pkg_resources
-        with resources.files('pyace.data').joinpath('mus_ns_uni_to_rawlsLS_np_rank.pckl').open('rb') as f:
+        with resources.files('lammps_pyace.data').joinpath('mus_ns_uni_to_rawlsLS_np_rank.pckl').open('rb') as f:
             unif_mus_ns_to_lsLScomb_dict = pickle.load(f)
 
     element_ndensity_dict =  element_ndensity_dict or {}

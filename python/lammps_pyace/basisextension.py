@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 from typing import List, Dict, Union
 
-from pyace.basis import ACEBBasisSet, BBasisConfiguration, BBasisFunctionsSpecificationBlock, \
+from lammps_pyace._basis import ACEBBasisSet, BBasisConfiguration, BBasisFunctionsSpecificationBlock, \
     BBasisFunctionSpecification
-from pyace.const import *
+from lammps_pyace.const import *
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -60,7 +60,7 @@ def get_actual_ladder_step(ladder_step_param: Union[int, float, List],
 def construct_bbasisconfiguration(potential_config: Dict,
                                   initial_basisconfig: BBasisConfiguration = None,
                                   overwrite_blocks_from_initial_bbasis=False) -> BBasisConfiguration:
-    from pyace.multispecies_basisextension import single_to_multispecies_converter, create_multispecies_basis_config
+    from lammps-pyace.multispecies_basisextension import single_to_multispecies_converter, create_multispecies_basis_config
     # for backward compatibility with pacemaker 1.0 potential_dict format
     check_backward_compatible_parameters(potential_config)
 
@@ -88,7 +88,7 @@ def sort_funcspecs_list(lst: List[BBasisFunctionSpecification], ladder_type: str
 def extend_basis(initial_basis: BBasisConfiguration, final_basis: BBasisConfiguration,
                  ladder_type: str, func_step: int = None, return_is_extended=False) -> BBasisConfiguration:
     # TODO: move from here, optimize import
-    from pyace.multispecies_basisextension import extend_multispecies_basis
+    from lammps-pyace.multispecies_basisextension import extend_multispecies_basis
     return extend_multispecies_basis(initial_basis, final_basis, ladder_type, func_step,
                                      return_is_extended=return_is_extended)
 
