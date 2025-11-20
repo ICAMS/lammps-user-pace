@@ -9,9 +9,7 @@ from copy import deepcopy
 from itertools import combinations, permutations, combinations_with_replacement, product
 from typing import Dict, List, Union, Tuple
 
-# Import from compiled C++ extension module
-from lammps_pyace.basis import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
-
+from lammps_pyace import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
 from .basisextension import *
 from .const import *
 
@@ -126,9 +124,6 @@ def create_species_block_without_funcs(elements_vec: List[str], block_spec: Dict
     # embedding
     if "fs_parameters" in block_spec:
         block.fs_parameters = block_spec["fs_parameters"]
-        print(f"### SET fs_parameters for {elements_vec}: {block.fs_parameters}")
-    else:
-        print(f"### NO fs_parameters in block_spec for {elements_vec}")
 
     if "ndensity" in block_spec:
         block.ndensityi = block_spec["ndensity"]
@@ -159,22 +154,10 @@ def create_species_block_without_funcs(elements_vec: List[str], block_spec: Dict
 
     if "nradbase" in block_spec:
         block.nradbaseij = block_spec["nradbase"]
-    elif "nradmax_by_orders" in block_spec and len(block_spec["nradmax_by_orders"]) > 0:
-        # Initialize from first element of nradmax_by_orders (rank 1)
-        # This ensures high-rank blocks have proper nradbaseij before funcspec creation
-        block.nradbaseij = block_spec["nradmax_by_orders"][0]
-        
     if "nradmax" in block_spec:
         block.nradmaxi = block_spec["nradmax"]
-    elif "nradmax_by_orders" in block_spec and len(block_spec["nradmax_by_orders"]) > 1:
-        # For blocks with multi-body terms, set nradmax from higher ranks
-        block.nradmaxi = max(block_spec["nradmax_by_orders"][1:]) if len(block_spec["nradmax_by_orders"][1:]) > 0 else 0
-        
     if "lmax" in block_spec:
         block.lmaxi = block_spec["lmax"]
-    elif "lmax_by_orders" in block_spec and len(block_spec["lmax_by_orders"]) > 0:
-        # Set lmax from maximum across all orders
-        block.lmaxi = max(block_spec["lmax_by_orders"])
 
     if "r_in" in block_spec:
         block.r_in = block_spec["r_in"]
@@ -204,38 +187,22 @@ def create_species_block_without_funcs(elements_vec: List[str], block_spec: Dict
 
 def generate_species_keys(elements, r):
     """
-    Generate all PACE-compatible species blocks (chemical channels) of body order `r`.
+    Generate all ordered permutations of the elements if size `r`
 
-    In the PACE / ACE framework, species blocks represent the distinct chemical
-    channels associated with an invariant of body order `r`. Each block is a multiset
-    of chemical species of length `r`, because the basis functions are symmetrized
-    over all permutations and depend only on the multiset, not on ordering.
-
-    This function enumerates all such multisets using combinations-with-replacement.
-    For example, with elements = ['Al', 'Ni'] and r = 3, the valid species blocks are:
-
-        ('Al','Al','Al'),
-        ('Al','Al','Ni'),
-        ('Al','Ni','Ni'),
-        ('Ni','Ni','Ni')
-
-    These multisets form the canonical species-channel keys used to index and group
-    the polynomial basis functions in PACE.
-
-    Parameters
-    ----------
-    elements : list of str
-        List of chemical species, such as ['Al', 'Ni'].
-    r : int
-        Body order of the invariant; r >= 1.
-
-    Returns
-    -------
-    list of tuple
-        Canonical species multisets of length `r`, sorted lexicographically, suitable
-        for direct use as PACE species-channel identifiers.
+    :param elements: list of elements
+    :param r: permutations size
+    :return: list of speices blocks names (permutation) of size `r`
     """
-    return [tuple(c) for c in combinations_with_replacement(sorted(elements), r)]
+    keys = set()
+    for el in elements:
+        rest_elements = [e for e in elements if e != el]
+
+        for rst in product(rest_elements, repeat=r - 1):
+            rst = list(dict.fromkeys(sorted(rst)))
+            key = tuple([el] + rst)
+            if len(key) == r:
+                keys.add(key)
+    return sorted(keys)
 
 
 def generate_all_species_keys(elements):
@@ -397,7 +364,7 @@ def create_multispecies_basis_config(potential_config: Dict,
     new_basis_conf = BBasisConfiguration()
     new_basis_conf.deltaSplineBins = potential_config.get("deltaSplineBins", 0.001)
     new_basis_conf.funcspecs_blocks = blocks_list
-    validate_bonds_nradmax_lmax_nradbase(new_basis_conf, potential_config)
+    validate_bonds_nradmax_lmax_nradbase(new_basis_conf)
     new_basis_conf.validate(raise_exception=True)
 
     if ("functions" in potential_config and
@@ -504,33 +471,16 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
     bonds_ext = update_bonds_ext(bonds_ext, functions_ext)
     ### Combine together to have block_spec specs
     block_spec_dict = deepcopy(functions_ext)
-    # update with embedding info - ALL blocks need embedding parameters from their first element
+    # update with embedding info
     for key, emb_ext_val in embeddings_ext.items():
-        # key is like ('Al',) - this is the element whose embedding we're setting
-        element = key[0]
-        # Apply to ALL blocks that start with this element
-        for block_key in list(block_spec_dict.keys()):
-            if block_key[0] == element:
-                print(f"### EMBEDDING UPDATE: {block_key} getting {emb_ext_val} (from {key})")
-                block_spec_dict[block_key].update(emb_ext_val)
-    
-    # update with bond info
-    # Collect updates first to avoid modifying dict during iteration
-    updates_to_apply = []
-    for key, bonds_ext_val in bonds_ext.items():
-        # Apply to binary block if it exists (e.g., ('Al', 'Al'))
         if key in block_spec_dict:
-            updates_to_apply.append((key, bonds_ext_val))
-        # Also apply to unary block if this is a same-element bond (e.g., ('Al',))
+            block_spec_dict[key].update(emb_ext_val)
+    # update with bond info
+    for key, bonds_ext_val in bonds_ext.items():
         if len(set(key)) == 1:
-            unary_key = (key[0],)
-            if unary_key in block_spec_dict:
-                updates_to_apply.append((unary_key, bonds_ext_val))
-    
-    # Now apply all updates
-    for key, bonds_ext_val in updates_to_apply:
-        block_spec_dict[key].update(bonds_ext_val)
-    
+            key = (key[0],)
+        if key in block_spec_dict:
+            block_spec_dict[key].update(bonds_ext_val)
     return block_spec_dict
 
 
@@ -542,19 +492,13 @@ def generate_functions_ext(potential_config):
     functions_ext = defaultdict(dict)
 
     if ALL in functions:
-        print(f"*** functions {functions}")
-        max_rank = len(functions['ALL']['nradmax_by_orders'])
-        for rank in range(1,max_rank+1):
-            for species in generate_species_keys(elements, r=rank):
-                for k,v in functions['ALL'].items():
-                    functions_ext[species][k] = v[:rank]
-                    
+        all_species_keys = generate_all_species_keys(elements)
+        for key in all_species_keys:
+            functions_ext[key].update(functions[ALL])
     for nary_key, nary_val in NARY_MAP.items():
         if nary_key in functions:
-            for species in generate_species_keys(elements, r=nary_val):
-                for k,v in functions['ALL'].items():
-                    functions_ext[species][k] = v[:nary_val]
-                    
+            for key in generate_species_keys(elements, r=nary_val):
+                functions_ext[key].update(functions[nary_key])
     for k in functions:
         if k not in KEYWORDS:
             if isinstance(k, str):  # single species string
@@ -567,9 +511,6 @@ def generate_functions_ext(potential_config):
     # drop all keys, that has no specifications
     functions_ext = {k: v for k, v in functions_ext.items() if len(v) > 0}
 
-    for k,v in functions_ext.items():
-        print(f"*** {k} {v}")
-        
     return functions_ext
 
 
@@ -733,8 +674,6 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                                     block_spec_dict["nradmax_by_orders"],
                                     lmin_by_orders, lmax_by_orders):
 
-            # print(f"*** rank {rank} nmax {nmax} lmin {lmin} lmax {lmax}")
-
             ns_range = range(1, nmax + 1)
 
             for mus_comb in combinations_with_replacement(elms, rank):
@@ -769,8 +708,6 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                                 raise ValueError(
                                     "Unknown func_coefs_initializer={}. Could be only 'zero' or 'random'".format(
                                         func_coefs_initializer))
-                                        
-                            # print(f"*** elements {mus_comb_ext} ns {ns_comb} ls {pre_ls} LS {pre_LS} coeffs {coefs}")
 
                             new_spec = BBasisFunctionSpecification(elements=mus_comb_ext,
                                                                    ns=ns_comb,
@@ -780,6 +717,7 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                                                                    )
 
                             current_block_func_spec_list.append(new_spec)
+        print(f"*** elements_vec {elements_vec} block_spec_dict {block_spec_dict}")
         spec_block.funcspecs = current_block_func_spec_list
     return spec_block
 
@@ -1092,13 +1030,10 @@ def validate_radial_shape_from_funcs(extended_block, func_list=None):
     extended_block.nradmaxi = new_nradmax
 
 
-def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration, potential_config: Dict):
+def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
     """
     Check the nradbase, lmax and nradmax over all bonds in all species blocks
     """
-    # Regenerate bonds_ext from potential_config
-    bonds_ext = generate_bonds_ext(potential_config) if "bonds" in potential_config else {}
-    
     ext_blocks_dict = {block.block_name: block for block in ext_basis.funcspecs_blocks}
 
     max_nlk_dict = defaultdict(lambda: defaultdict(int))
@@ -1122,8 +1057,7 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration, potenti
                 max_nlk_dict[bond]["lmax"] = max(max_nlk_dict[bond]["lmax"], l)
 
     # loop over max_nlk_dict and symmetrize pair bonds
-    for bond_pair in list(max_nlk_dict.keys()):  # Use list() to avoid dict changed during iteration
-        dct = max_nlk_dict[bond_pair]
+    for bond_pair, dct in max_nlk_dict.items():
         if len(bond_pair) == 2:
             sym_bond_pair = (bond_pair[1], bond_pair[0])
             sym_dct = max_nlk_dict[sym_bond_pair]
@@ -1141,92 +1075,28 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration, potenti
             bonds_dict[k[0]] = v
         else:
             bonds_dict[" ".join(k)] = v
-    
-    # CRITICAL: Merge in original bond parameters (radparameters, rcut, dcut, radbasename, etc.)
-    # bonds_dict from max_nlk_dict only has nradbase/nradmax/lmax, but we need ALL bond params
-    for bond_key, bond_params in bonds_ext.items():
-        # bond_key is like ('Al', 'Al') or ('Al', 'Ni')
-        # Convert to bonds_dict key format: 'Al' or 'Al Ni'
-        if bond_key[0] == bond_key[1]:
-            dict_key = bond_key[0]
-        else:
-            dict_key = " ".join(bond_key)
-        
-        print(f"### BOND MERGE: bond_key={bond_key}, dict_key={dict_key}, in bonds_dict={dict_key in bonds_dict}")
-        if dict_key in bonds_dict:
-            # Merge bond parameters, preserving the computed nradbase/nradmax/lmax
-            for param_name, param_value in bond_params.items():
-                if param_name not in ['nradbase', 'nradmax', 'lmax']:  # Don't overwrite computed values
-                    bonds_dict[dict_key][param_name] = param_value
-                    print(f"###   Added {param_name}={param_value}")
-        else:
-            print(f"###   WARNING: dict_key {dict_key} not in bonds_dict, skipping")
 
     for block in ext_basis.funcspecs_blocks:
         k = block.block_name
 
         # skip more ternary and higher blocks, because bond specification are defined only in unary/binary blocks
-        # However, preserve nradbaseij/lmaxi/nradmaxi if already set from function specifications
         if len(k.split()) > 2:
-            # High-rank blocks need radcoefficients for validation even though not used in computation
-            # Initialize as identity matrix (delta function)
-            if block.nradmaxi > 0 and block.nradbaseij > 0 and block.lmaxi >= 0:
-                crad = np.zeros((block.nradmaxi, block.lmaxi + 1, block.nradbaseij))
-                for n in range(0, min(block.nradmaxi, block.nradbaseij)):
-                    crad[n, :, n] = 1.0
-                block.radcoefficients = crad
-            else:
-                block.radcoefficients = []
-            # Preserve nradbaseij, lmaxi, nradmaxi - they were set during block creation from function specs
-            # Do NOT zero them out
+            block.radcoefficients = []
+            block.nradbaseij = 0
+            block.lmaxi = 0
+            block.nradmaxi = 0
             continue
-        
-        # For same-element blocks like 'Al Al', lookup as 'Al' in bonds_dict
-        # For different-element blocks like 'Al Ni', lookup as 'Al Ni'
-        k_parts = k.split()
-        if len(k_parts) == 2 and k_parts[0] == k_parts[1]:
-            lookup_key = k_parts[0]  # 'Al'
-        else:
-            lookup_key = k  # 'Al' or 'Ni' or 'Al Ni'
 
-        if block.nradbaseij < bonds_dict[lookup_key]["nradbase"]:
-            block.nradbaseij = bonds_dict[lookup_key]["nradbase"]
+        if block.nradbaseij < bonds_dict[k]["nradbase"]:
+            block.nradbaseij = bonds_dict[k]["nradbase"]
 
-        if block.nradmaxi < bonds_dict[lookup_key]["nradmax"]:
-            block.nradmaxi = bonds_dict[lookup_key]["nradmax"]
+        if block.nradmaxi < bonds_dict[k]["nradmax"]:
+            block.nradmaxi = bonds_dict[k]["nradmax"]
 
-        if block.lmaxi < bonds_dict[lookup_key]["lmax"]:
-            block.lmaxi = bonds_dict[lookup_key]["lmax"]
-        
-        # CRITICAL: Copy ALL bond parameters to blocks (radparameters, rcut, dcut, radbase, etc.)
-        bond_params = bonds_dict[lookup_key]
-        print(f"### SETTING BLOCK PARAMS for {k}: bond_params keys = {list(bond_params.keys())}")
-        if "radbase" in bond_params:
-            block.radbase = bond_params["radbase"]
-            print(f"###   Set radbase={block.radbase}")
-        if "radparameters" in bond_params:
-            block.radparameters = bond_params["radparameters"]
-            print(f"###   Set radparameters={block.radparameters}")
-        if "rcut" in bond_params:
-            block.rcutij = bond_params["rcut"]
-            print(f"###   Set rcutij={block.rcutij}")
-        if "dcut" in bond_params:
-            block.dcutij = bond_params["dcut"]
-            print(f"###   Set dcutij={block.dcutij}")
-        if "NameOfCutoffFunction" in bond_params:
-            block.NameOfCutoffFunctionij = bond_params["NameOfCutoffFunction"]
-        if "core-repulsion" in bond_params:
-            block.core_rep_parameters = bond_params["core-repulsion"]
-        if "r_in" in bond_params:
-            block.r_in = bond_params["r_in"]
-        if "delta_in" in bond_params:
-            block.delta_in = bond_params["delta_in"]
+        if block.lmaxi < bonds_dict[k]["lmax"]:
+            block.lmaxi = bonds_dict[k]["lmax"]
 
         initialize_block_crad(block)
-    
-    print(f"### VALIDATION COMPLETE: Updated {len(ext_basis.funcspecs_blocks)} blocks with bond parameters")
-    print(f"### ext_basis attributes: {[attr for attr in dir(ext_basis) if not attr.startswith('_')]}")
-    print(f"### ext_basis type: {type(ext_basis)}")
 
 
 def extend_multispecies_basis(initial_basis: BBasisConfiguration,
