@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Setup script for lammps-pyace package
+Setup script for lammps_pyace package
 """
 
 import os
@@ -24,14 +24,14 @@ class CMakeBuild(build_ext):
     def build_extension(self, ext):
         import subprocess
 
-        extdir = self.build_lib
+        extdir = os.path.abspath(self.build_lib)
         python_out = os.path.join(extdir, "lammps_pyace")
         os.makedirs(python_out, exist_ok=True)
 
         cmake_args = [
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={python_out}",
             f"-DPYTHON_EXECUTABLE={sys.executable}",
-            "-DCMAKE_BUILD_TYPE=Release",
+            "-DCMAKE_BUILD_TYPE=Debug",  # Changed to Debug for lldb debugging
         ]
 
         build_args = []
@@ -54,7 +54,7 @@ class CMakeBuild(build_ext):
 
 
 setup(
-    name='lammps-pyace',
+    name='lammps_pyace',
     version='0.1.0',
     author='Mitchell Wood',
     description='Python bindings for ML-PACE (Atomic Cluster Expansion)',
@@ -64,7 +64,7 @@ setup(
     package_data={
         'lammps_pyace': ['data/*.pckl'],
     },
-    ext_modules=[CMakeExtension('lammps_pyace._basis', sourcedir='.')],
+    ext_modules=[CMakeExtension('lammps_pyace.basis', sourcedir='.')],
     cmdclass={'build_ext': CMakeBuild},
     python_requires='>=3.8',
     install_requires=[

@@ -6,7 +6,7 @@ and manipulating ACE (Atomic Cluster Expansion) basis sets.
 """
 
 # Import C++ extension classes
-from lammps_pyace._basis import (
+from lammps_pyace.basis import (
     # Core basis classes
     ACEBBasisSet,
     ACECTildeBasisSet,

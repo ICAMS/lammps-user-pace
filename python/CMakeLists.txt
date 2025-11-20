@@ -1,13 +1,96 @@
 cmake_minimum_required(VERSION 3.15)
-project(lammps_pyace_python)
+
+# ============================================================
+#   Enforce Debug builds and full DWARF on macOS and Linux
+# ============================================================
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
+endif()
+
+set(CMAKE_MACOSX_RPATH ON)
+
+set(CMAKE_CXX_FLAGS_DEBUG "-g3 -O0 -fno-omit-frame-pointer")
+set(CMAKE_C_FLAGS_DEBUG   "-g3 -O0 -fno-omit-frame-pointer")
+
+# Disable stripping globally
+set(CMAKE_STRIP ":")
+
+add_compile_options("$<$<CONFIG:Debug>:-g3>")
+add_compile_options("$<$<CONFIG:Debug>:-fno-omit-frame-pointer>")
+
+# ============================================================
+# Continue with project() and targets
+# ============================================================
+
+project(lammps_pyace_python LANGUAGES CXX)
 
 # Find Python
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
-# Find or fetch pybind11
-find_package(pybind11 CONFIG QUIET)
-if(NOT pybind11_FOUND)
-    message(STATUS "pybind11 not found, fetching from GitHub")
+# -------------------------------- yaml-cpp --------------------------------
+find_package(yaml-cpp QUIET)
+
+if(NOT yaml-cpp_FOUND)
+    # enforce building libyaml-cpp as static library and turn off optional features
+    set(YAML_BUILD_SHARED_LIBS OFF)
+    set(YAML_CPP_BUILD_CONTRIB OFF)
+    set(YAML_CPP_BUILD_TOOLS OFF)
+    add_subdirectory(yaml-cpp build-yaml-cpp)
+    add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp-pace)
+
+    install(DIRECTORY yaml-cpp/include/yaml-cpp
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+      FILES_MATCHING
+      PATTERN *.h
+    )
+    set(BUILD_YAML_CPP TRUE)
+else()
+    find_package(yaml-cpp REQUIRED)
+    set(BUILD_YAML_CPP FALSE)
+endif()
+
+# -------------------------------- cnpy --------------------------------
+find_package(cnpy QUIET)
+
+if(NOT cnpy_FOUND)
+    add_library(cnpy-static STATIC ../cnpy/cnpy.cpp)
+    target_include_directories(cnpy-static PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/pace>
+    )
+    set_target_properties(cnpy-static PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME cnpy)
+    add_library(cnpy::cnpy ALIAS cnpy-static)
+
+    install(DIRECTORY cnpy
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pace
+      FILES_MATCHING
+      PATTERN *.h
+    )
+    set(BUILD_CNPY TRUE)
+else()
+    find_package(cnpy REQUIRED)
+    set(BUILD_CNPY FALSE)
+endif()
+
+# -------------------------------- wigner-cpp --------------------------------
+# this is header-only library
+set(WIGNER_PATH ../wigner-cpp)
+set(WIGNER_INCLUDE_PATH ${WIGNER_PATH}/include)
+
+install(DIRECTORY wigner
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pace
+  FILES_MATCHING
+  PATTERN *.hpp
+)
+
+# -------------------------------- pybind --------------------------------
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/pybind11/CMakeLists.txt")
+    message(STATUS "Using bundled pybind11")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/pybind11" pybind11-build)
+else()
+    message(STATUS "Bundled pybind11 not found, using FetchContent")
     include(FetchContent)
     FetchContent_Declare(
         pybind11
@@ -17,38 +100,79 @@ if(NOT pybind11_FOUND)
     FetchContent_MakeAvailable(pybind11)
 endif()
 
-# Find or build parent ML-PACE library
-find_package(pace CONFIG QUIET)
-if(NOT pace_FOUND)
-    set(PACE_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/ml-pace-build)
-    if(NOT TARGET pace::pace)
-        add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/.. ${PACE_BUILD_DIR})
-    endif()
+# -------------------------------- basis --------------------------------
+
+message(STATUS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
+# Don't override output directories - let setup.py control this
+# set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE build)
+# set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG build)
+
+set(ML_PACE "../ML-PACE")
+set(ACE ${ML_PACE}/ace)
+set(ACE_EVALUATOR ${ML_PACE}/ace-evaluator)
+set(HELPERS "helpers")
+
+include_directories(${ML_PACE})
+include_directories(${HELPERS})
+
+set(SOURCES_BASIS "${ACE_EVALUATOR}/ace_c_basis.cpp"
+        "${ACE_EVALUATOR}/ace_radial.cpp"
+        "${ACE_EVALUATOR}/ace_spherical_cart.cpp"
+        "${ACE_EVALUATOR}/ace_abstract_basis.cpp"
+        "${ACE_EVALUATOR}/ace_flatten_basis.cpp"
+        "${ACE_EVALUATOR}/ships_radial.cpp"
+        "${ACE}/ace_b_basis.cpp"
+        "${ACE}/ace_b_basisfunction.cpp"
+        "${ACE}/ace_clebsch_gordan.cpp"
+        "${ACE}/ace_couplings.cpp"
+        "${ACE}/ace_yaml_input.cpp"
+        "${HELPERS}/ace_c_basis_binding.cpp"
+        "${HELPERS}/ace_bbasis_spec_helper.cpp"
+        "${HELPERS}/ace_radial_helper.cpp"
+        "${HELPERS}/ace_c_basisfunction_helper.cpp"
+        "${HELPERS}/ace_c_basis_helper.cpp"
+  )
+  
+
+pybind11_add_module(basis ${SOURCES_BASIS} )
+target_include_directories(basis PRIVATE ${WIGNER_INCLUDE_PATH})
+target_link_libraries(basis PRIVATE yaml-cpp::yaml-cpp cnpy::cnpy)
+#set_target_properties(basis PROPERTIES OUTPUT_NAME "basis")
+
+target_compile_options(basis PRIVATE -Wno-deprecated-declarations)
+
+
+
+
+#if (CMAKE_COMPILER_IS_GNUCC)
+#  target_compile_options(basis PRIVATE -Wunused-variable -Wvla -Wno-effc++ -Werror=vla)
+#endif ()
+
+set(deps_targets "")
+
+if(BUILD_YAML_CPP)
+    list(APPEND deps_targets yaml-cpp-pace)
+else()
+    target_compile_definitions(basis PUBLIC YAML_PACE=YAML)
+    set_target_properties(basis PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+endif()
+
+if(BUILD_CNPY)
+    list(APPEND deps_targets cnpy-static)
+else()
+    file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/ML-PACE/cnpy)
+    file(WRITE ${PROJECT_SOURCE_DIR}/ML-PACE/cnpy/cnpy.h "#include <cnpy.h>")
 endif()
 
 
-pybind11_add_module(_basis
-    ace_c_basis_binding.cpp
-    helpers/ace_bbasis_spec_helper.cpp
-    helpers/ace_c_basis_helper.cpp
-    helpers/ace_c_basisfunction_helper.cpp
-    helpers/ace_radial_helper.cpp
-)
 
-target_link_libraries(_basis PRIVATE pace::pace)
 
-target_include_directories(_basis PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/helpers
-    ${CMAKE_CURRENT_SOURCE_DIR}/../ML-PACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../wigner-cpp/include
-)
 
 # Honor the directory provided by setup.py
 if(NOT CMAKE_LIBRARY_OUTPUT_DIRECTORY)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/lammps_pyace")
-endif()
-
-if(APPLE)
-    set_target_properties(_basis PROPERTIES SUFFIX ".so")
 endif()

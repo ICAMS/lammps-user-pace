@@ -10,7 +10,7 @@ from itertools import combinations, permutations, combinations_with_replacement,
 from typing import Dict, List, Union, Tuple
 
 # Import from compiled C++ extension module
-from lammps_pyace._basis import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
+from lammps_pyace.basis import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
 
 from .basisextension import *
 from .const import *
