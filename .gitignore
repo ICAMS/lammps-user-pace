@@ -1,7 +1,6 @@
 /ML-PACE/cnpy
 .DS_Store
-/python/lammps_pyace.egg-info
-*.so
+*.egg-info
 *.so
 *.pyc
 /python/build
