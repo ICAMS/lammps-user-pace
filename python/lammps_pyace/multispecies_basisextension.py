@@ -120,67 +120,92 @@ def create_species_block_without_funcs(elements_vec: List[str], block_spec: Dict
 
     block.block_name = " ".join(elements_vec)
     block.elements_vec = elements_vec
+    
+    # Determine if this is a ternary or higher-order block
+    # Ternary and higher blocks should NOT have bond specifications
+    # They only use bonds from constituent binary blocks
+    is_ternary_or_higher = len(elements_vec) > 2
 
-    # embedding
-    if "fs_parameters" in block_spec:
-        block.fs_parameters = block_spec["fs_parameters"]
+    # embedding (only for unary blocks)
+    if not is_ternary_or_higher:
+        if "fs_parameters" in block_spec:
+            block.fs_parameters = block_spec["fs_parameters"]
 
-    if "ndensity" in block_spec:
-        block.ndensityi = block_spec["ndensity"]
+        if "ndensity" in block_spec:
+            block.ndensityi = block_spec["ndensity"]
 
-    if "npot" in block_spec:
-        block.npoti = block_spec["npot"]
+        if "npot" in block_spec:
+            block.npoti = block_spec["npot"]
 
-    if "drho_core_cut" in block_spec:
-        block.drho_cut = block_spec["drho_core_cut"]
-    if "rho_core_cut" in block_spec:
-        block.rho_cut = block_spec["rho_core_cut"]
+        if "drho_core_cut" in block_spec:
+            block.drho_cut = block_spec["drho_core_cut"]
+        if "rho_core_cut" in block_spec:
+            block.rho_cut = block_spec["rho_core_cut"]
 
-    # bonds
-    if "NameOfCutoffFunction" in block_spec:
-        block.NameOfCutoffFunctionij = block_spec["NameOfCutoffFunction"]
+    # bonds (only for unary and binary blocks)
+    if not is_ternary_or_higher:
+        if "NameOfCutoffFunction" in block_spec:
+            block.NameOfCutoffFunctionij = block_spec["NameOfCutoffFunction"]
 
-    if "core-repulsion" in block_spec:
-        block.core_rep_parameters = block_spec["core-repulsion"]
+        if "core-repulsion" in block_spec:
+            block.core_rep_parameters = block_spec["core-repulsion"]
 
-    if "rcut" in block_spec:
-        block.rcutij = block_spec["rcut"]
-    if "dcut" in block_spec:
-        block.dcutij = block_spec["dcut"]
-    if "radbase" in block_spec:
-        block.radbase = block_spec["radbase"]
-    if "radparameters" in block_spec:
-        block.radparameters = block_spec["radparameters"]
+        if "rcut" in block_spec:
+            block.rcutij = block_spec["rcut"]
+        if "dcut" in block_spec:
+            block.dcutij = block_spec["dcut"]
+        if "radbase" in block_spec:
+            block.radbase = block_spec["radbase"]
+        if "radparameters" in block_spec:
+            block.radparameters = block_spec["radparameters"]
 
-    if "nradbase" in block_spec:
-        block.nradbaseij = block_spec["nradbase"]
-    if "nradmax" in block_spec:
-        block.nradmaxi = block_spec["nradmax"]
-    if "lmax" in block_spec:
-        block.lmaxi = block_spec["lmax"]
+        if "nradbase" in block_spec:
+            block.nradbaseij = block_spec["nradbase"]
+        if "nradmax" in block_spec:
+            block.nradmaxi = block_spec["nradmax"]
+        if "lmax" in block_spec:
+            block.lmaxi = block_spec["lmax"]
 
-    if "r_in" in block_spec:
-        block.r_in = block_spec["r_in"]
-        block.inner_cutoff_type = "distance"
-    if "delta_in" in block_spec:
-        block.delta_in = block_spec["delta_in"]
-        block.inner_cutoff_type = "distance"
-    if "inner_cutoff_type" in block_spec:
-        block.inner_cutoff_type = block_spec["inner_cutoff_type"]
+        if "r_in" in block_spec:
+            block.r_in = block_spec["r_in"]
+            block.inner_cutoff_type = "distance"
+        if "delta_in" in block_spec:
+            block.delta_in = block_spec["delta_in"]
+            block.inner_cutoff_type = "distance"
+        if "inner_cutoff_type" in block_spec:
+            block.inner_cutoff_type = block_spec["inner_cutoff_type"]
+        else:
+            block.inner_cutoff_type = "distance"
+
+        # Initialize radial coefficients for unary and binary blocks only
+        crad = np.zeros((block.nradmaxi, block.lmaxi + 1, block.nradbaseij))
+
+        for n in range(0, min(block.nradmaxi, block.nradbaseij)):  # +1 is excluded, because ns=1...
+            crad[n, :, n] = 1.0
+
+        block.radcoefficients = crad
     else:
+        # For ternary and higher blocks, infer nradbase/nradmax/lmax from function specs
+        # These are needed for the radial function space dimensions
+        # But we DON'T set actual bond parameters (rcut, radbase, radparameters)
+        if "nradmax_by_orders" in block_spec and "lmax_by_orders" in block_spec:
+            nradmax_by_orders = block_spec["nradmax_by_orders"]
+            lmax_by_orders = block_spec["lmax_by_orders"]
+            
+            # nradbase comes from rank-1 (first element of nradmax_by_orders)
+            block.nradbaseij = max(nradmax_by_orders[:1]) if nradmax_by_orders else 0
+            # nradmax comes from rank>1 (rest of nradmax_by_orders)
+            block.nradmaxi = max(nradmax_by_orders[1:]) if len(nradmax_by_orders) > 1 else 0
+            # lmax is the maximum across all ranks
+            block.lmaxi = max(lmax_by_orders) if lmax_by_orders else 0
+        else:
+            block.nradbaseij = 0
+            block.nradmaxi = 0
+            block.lmaxi = 0
+        
+        # No radial coefficients for ternary blocks
+        block.radcoefficients = []
         block.inner_cutoff_type = "distance"
-
-    # if crad_initializer == "delta":
-    crad = np.zeros((block.nradmaxi, block.lmaxi + 1, block.nradbaseij))
-
-    for n in range(0, min(block.nradmaxi, block.nradbaseij)):  # +1 is excluded, because ns=1...
-        crad[n, :, n] = 1.0
-    # elif crad_initializer == "random":
-    #     crad = np.random.randn(block.nradmaxi, block.lmaxi + 1, block.nradbaseij)
-    # else:
-    #     raise ValueError("Unknown crad_initializer={}. Could be only 'delta' or 'random'".format(crad_initializer))
-
-    block.radcoefficients = crad
 
     return block
 
@@ -448,6 +473,14 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
    :param potential_config: potential configuration dictionary, see above
    :return: blocks_specifications_dict
    """
+    print(f"\n*** DEBUG: Input potential_config['functions']:")
+    if 'functions' in potential_config:
+        for key, val in potential_config['functions'].items():
+            print(f"  {key}: {val}")
+    print(f"\n*** DEBUG: Input potential_config['bonds']:")
+    if 'bonds' in potential_config:
+        for key, val in potential_config['bonds'].items():
+            print(f"  {key}: {val}")
 
     ### Embeddings
     ### possible keywords: ALL, UNARY  + el
@@ -465,10 +498,16 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
     ### possible keywords: ALL, UNARY, BINARY, TERNARY, QUATERNARY, QUINARY + (el,el,...)
     if "functions" in potential_config:
         functions_ext = generate_functions_ext(potential_config)
+        print(f"\n*** DEBUG: functions_ext after generate_functions_ext:")
+        for key, val in functions_ext.items():
+            print(f"  {key}: {val}")
     else:
         functions_ext = {}
     ### Update bonds specifications according to maximum observable nmax, lmax, nradbasemax in functions specifications
     bonds_ext = update_bonds_ext(bonds_ext, functions_ext)
+    print(f"\n*** DEBUG: bonds_ext after update_bonds_ext:")
+    for key, val in bonds_ext.items():
+        print(f"  {key}: {val}")
     ### Combine together to have block_spec specs
     block_spec_dict = deepcopy(functions_ext)
     # update with embedding info
@@ -481,6 +520,23 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
             key = (key[0],)
         if key in block_spec_dict:
             block_spec_dict[key].update(bonds_ext_val)
+    
+    # DEBUG: Print what blocks we're creating
+    print(f"\n*** DEBUG: Block specifications dictionary:")
+    for key in sorted(block_spec_dict.keys()):
+        print(f"  Block key: {key}")
+        if len(key) == 2 and key[0] != key[1]:
+            # Check if we have both permutations for binary blocks
+            rev_key = (key[1], key[0])
+            if rev_key in block_spec_dict:
+                print(f"    WARNING: Both {key} and {rev_key} exist!")
+                # Compare their bond specifications
+                spec1 = {k:v for k,v in block_spec_dict[key].items() if k in ['rcut', 'radbase', 'radparameters', 'dcut']}
+                spec2 = {k:v for k,v in block_spec_dict[rev_key].items() if k in ['rcut', 'radbase', 'radparameters', 'dcut']}
+                print(f"      {key} bonds: {spec1}")
+                print(f"      {rev_key} bonds: {spec2}")
+                print(f"      Are they equal? {spec1 == spec2}")
+    
     return block_spec_dict
 
 
@@ -620,7 +676,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
                                          element_ndensity_dict: Dict = None,
                                          func_coefs_initializer="zero",
                                          unif_mus_ns_to_lsLScomb_dict=None,
-                                         verbose=True) -> List[BBasisFunctionsSpecificationBlock]:
+                                         verbose=False) -> List[BBasisFunctionsSpecificationBlock]:
     blocks_specifications_dict = generate_blocks_specifications_dict(potential_config)
 
     if unif_mus_ns_to_lsLScomb_dict is None:
@@ -652,7 +708,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
 
 def create_species_block(elements_vec: List, block_spec_dict: Dict,
                          ndensity: int,
-                         func_coefs_initializer="zero",
+                         func_coefs_initializer="one",
                          unif_mus_ns_to_lsLScomb_dict=None) -> BBasisFunctionsSpecificationBlock:
     central_atom = elements_vec[0]
 
@@ -701,12 +757,14 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                                 func_coefs_initializer = block_spec_dict["coefs_init"]
 
                             if func_coefs_initializer == "zero":
-                                coefs = [0] * ndensity
+                                coefs = [0.0] * ndensity
+                            elif func_coefs_initializer == "one":
+                                coefs = [1.0] * ndensity
                             elif func_coefs_initializer == "random":
                                 coefs = np.random.randn(ndensity) * 1e-4
                             else:
                                 raise ValueError(
-                                    "Unknown func_coefs_initializer={}. Could be only 'zero' or 'random'".format(
+                                    "Unknown func_coefs_initializer={}. Could be only 'zero', 'one' or 'random'".format(
                                         func_coefs_initializer))
 
                             new_spec = BBasisFunctionSpecification(elements=mus_comb_ext,
@@ -722,48 +780,6 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
     return spec_block
 
 
-def single_to_multispecies_converter(potential_config):
-    new_multi_species_potential_config = {}
-
-    if "deltaSplineBins" in potential_config:
-        new_multi_species_potential_config["deltaSplineBins"] = potential_config["deltaSplineBins"]
-    element = potential_config["element"]
-    new_multi_species_potential_config["elements"] = [element]
-
-    embeddings = {}
-    embeddings_kw_list = ["npot", "fs_parameters", "ndensity", "rho_core_cut", "drho_core_cut"]
-
-    for kw in embeddings_kw_list:
-        if kw in potential_config:
-            embeddings[kw] = potential_config[kw]
-
-    new_multi_species_potential_config["embeddings"] = {element: embeddings}
-
-    bonds = {}
-    bonds_kw_list = ["NameOfCutoffFunction",
-                     "core-repulsion",
-                     "dcut",
-                     "rcut",
-                     "radbase",
-                     "radparameters"]
-    for kw in bonds_kw_list:
-        if kw in potential_config:
-            bonds[kw] = potential_config[kw]
-
-    new_multi_species_potential_config["bonds"] = {element: bonds}
-
-    functions = {}
-    functions_kw_list = ["nradmax_by_orders", "lmin_by_orders", "lmax_by_orders", ]
-    for kw in functions_kw_list:
-        if kw in potential_config:
-            functions[kw] = potential_config[kw]
-    if "func_coefs_init" in potential_config:
-        functions["coefs_init"] = potential_config["func_coefs_init"]
-
-    new_multi_species_potential_config["functions"] = {element: functions}
-
-    return new_multi_species_potential_config
-
 
 def tail_sort(combs):
     return tuple(list(combs[:1]) + sorted(combs[1:]))
@@ -777,117 +793,7 @@ def species_tail_sorted_permutation(elements, r):
     return tuple(sorted(combs))
 
 
-def expand_trainable_parameters(elements: list, trainable_parameters: Union[str, list, dict] = None) -> dict:
-    if trainable_parameters is None:
-        trainable_parameters = []
 
-    if isinstance(trainable_parameters, str):
-        if trainable_parameters in ["func", "radial"]:
-            trainable_parameters = {"ALL": trainable_parameters}
-        else:
-            trainable_parameters = [trainable_parameters]
-
-    if len(trainable_parameters) == 0:
-        trainable_parameters = [ALL]
-
-    is_dict_format = isinstance(trainable_parameters, dict)
-
-    nelements = len(elements)
-    DEFAULT_PARAMS = ["func", "radial"]
-
-    # if trainable_parameters is list -> options=["radial","func"]
-    new_trainable_parameters_dict = {}
-
-    # check ALL keyword
-    if ALL in trainable_parameters:
-        params = trainable_parameters[ALL] if is_dict_format else DEFAULT_PARAMS
-
-        # wrap pure str into list
-        if isinstance(params, str):
-            params = [params]
-
-        if params == ["all"]:
-            params = DEFAULT_PARAMS
-
-        for r in range(1, nelements + 1):
-            for comb in species_tail_sorted_permutation(elements, r):
-                new_trainable_parameters_dict[comb] = params
-
-    # check NARY's keywords
-    for kw, r in NARY_MAP.items():
-        if kw in trainable_parameters:
-            params = trainable_parameters[kw] if is_dict_format else DEFAULT_PARAMS
-            # wrap pure str nto list
-            if isinstance(params, str):
-                params = [params]
-            if params == ["all"]:
-                params = DEFAULT_PARAMS
-            for comb in species_tail_sorted_permutation(elements, r):
-                new_trainable_parameters_dict[comb] = params
-
-    # check exact combinations
-    for comb in trainable_parameters:
-        if comb not in KEYWORDS:
-            # translate str -> to element tuple using regex
-            if isinstance(comb, str):
-                ext_comb = tuple(element_patt.findall(comb))
-            else:
-                ext_comb = comb
-
-            params = trainable_parameters[comb] if is_dict_format else DEFAULT_PARAMS
-            # wrap pure str nto list
-            if isinstance(params, str):
-                params = [params]
-            if params == ["all"]:
-                params = DEFAULT_PARAMS
-            new_trainable_parameters_dict[ext_comb] = params
-
-    # clear "radial" from r>2
-    new_trainable_parameters_dict_cleared = {}
-
-    for comb, params in new_trainable_parameters_dict.items():
-        params = params.copy()
-        r = len(comb)
-        if r > 2 and "radial" in params:
-            params.remove("radial")
-        elif r == 2:  # check the bonds symmetry
-            inv_comb = tuple(reversed(comb))
-            if ("radial" in comb) != ("radial" in inv_comb):
-                raise ValueError(
-                    "Inconsisteny setup of 'radial' parameters trainability for {} and {}:".format(comb, inv_comb) +
-                    "This option should be identical"
-                )
-
-        new_trainable_parameters_dict_cleared[comb] = params
-
-    return new_trainable_parameters_dict_cleared
-
-
-def compute_bbasisset_train_mask(bbasisconf: Union[BBasisConfiguration, ACEBBasisSet],
-                                 extended_trainable_parameters_dict: dict):
-    if isinstance(bbasisconf, BBasisConfiguration):
-        bbasis_set = ACEBBasisSet(bbasisconf)
-    elif isinstance(bbasisconf, ACEBBasisSet):
-        bbasis_set = bbasisconf
-
-    elements_to_ind_map = bbasis_set.elements_to_index_map
-
-    ind_trainable_parameters_dict = {tuple(elements_to_ind_map[el] for el in k): v for k, v in
-                                     extended_trainable_parameters_dict.items()}
-    crad_train_mask = np.zeros(len(bbasis_set.crad_coeffs_mask), dtype=bool)
-    basis_train_mask = np.zeros(len(bbasis_set.basis_coeffs_mask), dtype=bool)
-
-    crad_coeffs_mask = [tuple(c) for c in bbasis_set.crad_coeffs_mask]
-    basis_coeffs_mask = [tuple(c) for c in bbasis_set.basis_coeffs_mask]
-
-    for ind_comb, params in ind_trainable_parameters_dict.items():
-        if "radial" in params:
-            crad_train_mask = np.logical_or(crad_train_mask, [c == ind_comb for c in crad_coeffs_mask])
-        if "func" in params:
-            basis_train_mask = np.logical_or(basis_train_mask, [c == ind_comb for c in basis_coeffs_mask])
-
-    total_train_mask = np.concatenate((crad_train_mask, basis_train_mask))
-    return total_train_mask
 
 
 def is_mult_basisfunc_equivalent(func1: BBasisFunctionSpecification, func2: BBasisFunctionSpecification) -> bool:
@@ -1057,7 +963,8 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
                 max_nlk_dict[bond]["lmax"] = max(max_nlk_dict[bond]["lmax"], l)
 
     # loop over max_nlk_dict and symmetrize pair bonds
-    for bond_pair, dct in max_nlk_dict.items():
+    # Use list() to avoid "dictionary changed size during iteration" error
+    for bond_pair, dct in list(max_nlk_dict.items()):
         if len(bond_pair) == 2:
             sym_bond_pair = (bond_pair[1], bond_pair[0])
             sym_dct = max_nlk_dict[sym_bond_pair]
@@ -1079,12 +986,10 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
     for block in ext_basis.funcspecs_blocks:
         k = block.block_name
 
-        # skip more ternary and higher blocks, because bond specification are defined only in unary/binary blocks
+        # Ternary and higher blocks don't need radial coefficient updates
+        # They were already initialized correctly in create_species_block_without_funcs()
+        # with the nradbase/nradmax/lmax values we inferred from constituent bonds
         if len(k.split()) > 2:
-            block.radcoefficients = []
-            block.nradbaseij = 0
-            block.lmaxi = 0
-            block.nradmaxi = 0
             continue
 
         if block.nradbaseij < bonds_dict[k]["nradbase"]:
@@ -1156,3 +1061,229 @@ def extend_multispecies_basis(initial_basis: BBasisConfiguration,
         return extended_basis, is_basis_extended
     else:
         return extended_basis
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# -------------------------------- ORPHANED CODE --------------------------------
+"""
+
+
+def compute_bbasisset_train_mask(bbasisconf: Union[BBasisConfiguration, ACEBBasisSet],
+                                 extended_trainable_parameters_dict: dict):
+    if isinstance(bbasisconf, BBasisConfiguration):
+        bbasis_set = ACEBBasisSet(bbasisconf)
+    elif isinstance(bbasisconf, ACEBBasisSet):
+        bbasis_set = bbasisconf
+
+    elements_to_ind_map = bbasis_set.elements_to_index_map
+
+    ind_trainable_parameters_dict = {tuple(elements_to_ind_map[el] for el in k): v for k, v in
+                                     extended_trainable_parameters_dict.items()}
+    crad_train_mask = np.zeros(len(bbasis_set.crad_coeffs_mask), dtype=bool)
+    basis_train_mask = np.zeros(len(bbasis_set.basis_coeffs_mask), dtype=bool)
+
+    crad_coeffs_mask = [tuple(c) for c in bbasis_set.crad_coeffs_mask]
+    basis_coeffs_mask = [tuple(c) for c in bbasis_set.basis_coeffs_mask]
+
+    for ind_comb, params in ind_trainable_parameters_dict.items():
+        if "radial" in params:
+            crad_train_mask = np.logical_or(crad_train_mask, [c == ind_comb for c in crad_coeffs_mask])
+        if "func" in params:
+            basis_train_mask = np.logical_or(basis_train_mask, [c == ind_comb for c in basis_coeffs_mask])
+
+    total_train_mask = np.concatenate((crad_train_mask, basis_train_mask))
+    return total_train_mask
+
+
+def single_to_multispecies_converter(potential_config):
+    new_multi_species_potential_config = {}
+
+    if "deltaSplineBins" in potential_config:
+        new_multi_species_potential_config["deltaSplineBins"] = potential_config["deltaSplineBins"]
+    element = potential_config["element"]
+    new_multi_species_potential_config["elements"] = [element]
+
+    embeddings = {}
+    embeddings_kw_list = ["npot", "fs_parameters", "ndensity", "rho_core_cut", "drho_core_cut"]
+
+    for kw in embeddings_kw_list:
+        if kw in potential_config:
+            embeddings[kw] = potential_config[kw]
+
+    new_multi_species_potential_config["embeddings"] = {element: embeddings}
+
+    bonds = {}
+    bonds_kw_list = ["NameOfCutoffFunction",
+                     "core-repulsion",
+                     "dcut",
+                     "rcut",
+                     "radbase",
+                     "radparameters"]
+    for kw in bonds_kw_list:
+        if kw in potential_config:
+            bonds[kw] = potential_config[kw]
+
+    new_multi_species_potential_config["bonds"] = {element: bonds}
+
+    functions = {}
+    functions_kw_list = ["nradmax_by_orders", "lmin_by_orders", "lmax_by_orders", ]
+    for kw in functions_kw_list:
+        if kw in potential_config:
+            functions[kw] = potential_config[kw]
+    if "func_coefs_init" in potential_config:
+        functions["coefs_init"] = potential_config["func_coefs_init"]
+
+    new_multi_species_potential_config["functions"] = {element: functions}
+
+    return new_multi_species_potential_config
+
+
+
+
+
+def expand_trainable_parameters(elements: list, trainable_parameters: Union[str, list, dict] = None) -> dict:
+    if trainable_parameters is None:
+        trainable_parameters = []
+
+    if isinstance(trainable_parameters, str):
+        if trainable_parameters in ["func", "radial"]:
+            trainable_parameters = {"ALL": trainable_parameters}
+        else:
+            trainable_parameters = [trainable_parameters]
+
+    if len(trainable_parameters) == 0:
+        trainable_parameters = [ALL]
+
+    is_dict_format = isinstance(trainable_parameters, dict)
+
+    nelements = len(elements)
+    DEFAULT_PARAMS = ["func", "radial"]
+
+    # if trainable_parameters is list -> options=["radial","func"]
+    new_trainable_parameters_dict = {}
+
+    # check ALL keyword
+    if ALL in trainable_parameters:
+        params = trainable_parameters[ALL] if is_dict_format else DEFAULT_PARAMS
+
+        # wrap pure str into list
+        if isinstance(params, str):
+            params = [params]
+
+        if params == ["all"]:
+            params = DEFAULT_PARAMS
+
+        for r in range(1, nelements + 1):
+            for comb in species_tail_sorted_permutation(elements, r):
+                new_trainable_parameters_dict[comb] = params
+
+    # check NARY's keywords
+    for kw, r in NARY_MAP.items():
+        if kw in trainable_parameters:
+            params = trainable_parameters[kw] if is_dict_format else DEFAULT_PARAMS
+            # wrap pure str nto list
+            if isinstance(params, str):
+                params = [params]
+            if params == ["all"]:
+                params = DEFAULT_PARAMS
+            for comb in species_tail_sorted_permutation(elements, r):
+                new_trainable_parameters_dict[comb] = params
+
+    # check exact combinations
+    for comb in trainable_parameters:
+        if comb not in KEYWORDS:
+            # translate str -> to element tuple using regex
+            if isinstance(comb, str):
+                ext_comb = tuple(element_patt.findall(comb))
+            else:
+                ext_comb = comb
+
+            params = trainable_parameters[comb] if is_dict_format else DEFAULT_PARAMS
+            # wrap pure str nto list
+            if isinstance(params, str):
+                params = [params]
+            if params == ["all"]:
+                params = DEFAULT_PARAMS
+            new_trainable_parameters_dict[ext_comb] = params
+
+    # clear "radial" from r>2
+    new_trainable_parameters_dict_cleared = {}
+
+    for comb, params in new_trainable_parameters_dict.items():
+        params = params.copy()
+        r = len(comb)
+        if r > 2 and "radial" in params:
+            params.remove("radial")
+        elif r == 2:  # check the bonds symmetry
+            inv_comb = tuple(reversed(comb))
+            if ("radial" in comb) != ("radial" in inv_comb):
+                raise ValueError(
+                    "Inconsisteny setup of 'radial' parameters trainability for {} and {}:".format(comb, inv_comb) +
+                    "This option should be identical"
+                )
+
+        new_trainable_parameters_dict_cleared[comb] = params
+
+    return new_trainable_parameters_dict_cleared
+
+"""
