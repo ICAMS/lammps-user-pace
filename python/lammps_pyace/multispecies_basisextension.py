@@ -9,9 +9,7 @@ from copy import deepcopy
 from itertools import combinations, permutations, combinations_with_replacement, product
 from typing import Dict, List, Union, Tuple
 
-from lammps_pyace import BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock, ACEBBasisSet
-from .basisextension import *
-from .const import *
+from lammps_pyace import ACEBBasisSet, BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock
 
 element_patt = re.compile("([A-Z][a-z]?)")
 
@@ -44,7 +42,6 @@ PERIODIC_ELEMENTS = chemical_symbols = [
     'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc',
     'Lv', 'Ts', 'Og']
 
-# Modern approach using importlib.resources - will be used directly in the function
 
 def clean_bbasisconfig(initial_bbasisconfig):
     for block in initial_bbasisconfig.funcspecs_blocks:
@@ -303,8 +300,6 @@ def create_multispecies_basis_config(potential_config: Dict,
         }
     }
 
-
-
     :param potential_config: potential configuration dictionary, see above
     :param unif_mus_ns_to_lsLScomb_dict: "whitelist" (dictionary) of the { unify_mus_ns_comb(mus_comb, ns_comb): list of (ls,LS) }
     :param func_coefs_initializer: "zero" or "random"
@@ -469,18 +464,25 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
         functions_ext = {}
     ### Update bonds specifications according to maximum observable nmax, lmax, nradbasemax in functions specifications
     bonds_ext = update_bonds_ext(bonds_ext, functions_ext)
+
     ### Combine together to have block_spec specs
+    # print(f"*** generate_blocks_specifications_dict() functions_ext {functions_ext}")
     block_spec_dict = deepcopy(functions_ext)
+
     # update with embedding info
+    # print(f"*** generate_blocks_specifications_dict() embeddings_ext {embeddings_ext}")
     for key, emb_ext_val in embeddings_ext.items():
         if key in block_spec_dict:
             block_spec_dict[key].update(emb_ext_val)
+            
     # update with bond info
+    # print(f"*** generate_blocks_specifications_dict() bonds_ext {bonds_ext}")
     for key, bonds_ext_val in bonds_ext.items():
         if len(set(key)) == 1:
             key = (key[0],)
         if key in block_spec_dict:
             block_spec_dict[key].update(bonds_ext_val)
+            
     return block_spec_dict
 
 
@@ -579,39 +581,60 @@ def update_bonds_ext(bonds_ext, functions_ext):
     bonds_ext_updated = deepcopy(bonds_ext)
     # run through functions specifications and update/validate bond's nradbase, nradmax, lmax
     for key, funcs_spec in functions_ext.items():
-        nradbasemax = max(funcs_spec[ORDERS_NRADMAX_KW][:1])
-        if len(funcs_spec[ORDERS_NRADMAX_KW][1:]) > 0:
-            nradmax = max(funcs_spec[ORDERS_NRADMAX_KW][1:])
+        nradbasemax = max(funcs_spec['nradmax_by_orders'][:1])
+        if len(funcs_spec['nradmax_by_orders'][1:]) > 0:
+            nradmax = max(funcs_spec['nradmax_by_orders'][1:])
         else:
             nradmax = 0
-        lmax = max(funcs_spec[ORDERS_LMAX_KW])
+        lmax = max(funcs_spec['lmax_by_orders'])
+        
+        if len(key) > 2:
+            funcs_spec['nradmax'] = max(nradmax, nradbasemax)
+            funcs_spec['nradbasemax'] = nradbasemax
+            funcs_spec['lmax'] = lmax
+            funcs_spec['nradbase'] = nradbasemax
+            funcs_spec['rcut'] = np.inf
+            funcs_spec['dcut'] = 0.0
+            funcs_spec['rcut_in'] = 0.0
+            funcs_spec['dcut_in'] = 0.0
+
 
         for bkey in species_key_to_bonds(key):
-
+        
             bond = bonds_ext[bkey]
+                    
+            if len(key)>2:
+                bonds_bkey = bonds_ext_updated[bkey]
+                funcs_spec['radparameters'] = bonds_bkey['radparameters']
+                funcs_spec['core-repulsion'] = bonds_bkey['core-repulsion']
+                funcs_spec['rcut'] = min(funcs_spec['rcut'], bonds_bkey['rcut'])
+                funcs_spec['dcut'] = max(funcs_spec['dcut'], bonds_bkey['dcut'])
+                funcs_spec['rcut_in'] = max(funcs_spec['rcut_in'], bonds_bkey['rcut_in'])
+                funcs_spec['dcut_in'] = max(funcs_spec['dcut_in'], bonds_bkey['dcut_in'])
+                print(f"*** key {key} bkey {bkey} bonds_bkey {bonds_bkey} funcs_spec {funcs_spec}")
 
-            if POTENTIAL_NRADBASE_KW not in bond:
-                if bonds_ext_updated[bkey].get(POTENTIAL_NRADBASE_KW, 0) < nradbasemax:
-                    bonds_ext_updated[bkey][POTENTIAL_NRADBASE_KW] = nradbasemax
+            if 'nradbase' not in bond:
+                if bonds_ext_updated[bkey].get('nradbase', 0) < nradbasemax:
+                    bonds_ext_updated[bkey]['nradbase'] = nradbasemax
             else:
-                if bond[POTENTIAL_NRADBASE_KW] < nradbasemax:
-                    raise ValueError(f"Given `{POTENTIAL_NRADBASE_KW}`={bond[POTENTIAL_NRADBASE_KW]} for bond {bkey} " + \
+                if bond['nradbase'] < nradbasemax:
+                    raise ValueError(f"nradbase={bond['nradbase']} for bond {bkey} " + \
                                      f"is less than nradbasemax={nradbasemax} from {key}")
 
-            if POTENTIAL_NRADMAX_KW not in bond:
-                if bonds_ext_updated[bkey].get(POTENTIAL_NRADMAX_KW, 0) < nradmax:
-                    bonds_ext_updated[bkey][POTENTIAL_NRADMAX_KW] = nradmax
+            if 'nradmax' not in bond:
+                if bonds_ext_updated[bkey].get('nradmax', 0) < nradmax:
+                    bonds_ext_updated[bkey]['nradmax'] = nradmax
             else:
-                if bond[POTENTIAL_NRADMAX_KW] < nradmax:
-                    raise ValueError(f"Given `{POTENTIAL_NRADMAX_KW}`={bond[POTENTIAL_NRADMAX_KW]} for bond {bkey} " + \
+                if bond['nradmax'] < nradmax:
+                    raise ValueError(f"nradmax={bond['nradmax']} for bond {bkey} " + \
                                      f"is less than nradmax={nradmax} from {key}")
 
-            if POTENTIAL_LMAX_KW not in bond:
-                if bonds_ext_updated[bkey].get(POTENTIAL_LMAX_KW, 0) < lmax:
-                    bonds_ext_updated[bkey][POTENTIAL_LMAX_KW] = lmax
+            if 'lmax' not in bond:
+                if bonds_ext_updated[bkey].get('lmax', 0) < lmax:
+                    bonds_ext_updated[bkey]['lmax'] = lmax
             else:
-                if bond[POTENTIAL_LMAX_KW] < lmax:
-                    raise ValueError(f"Given `{POTENTIAL_LMAX_KW}`={bond[POTENTIAL_LMAX_KW]} for bond {bkey} " + \
+                if bond['lmax'] < lmax:
+                    raise ValueError(f"lmax={bond['lmax']} for bond {bkey} " + \
                                      f"is less than nradmax={lmax} from {key}")
     return bonds_ext_updated
 
@@ -620,7 +643,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
                                          element_ndensity_dict: Dict = None,
                                          func_coefs_initializer="zero",
                                          unif_mus_ns_to_lsLScomb_dict=None,
-                                         verbose=True) -> List[BBasisFunctionsSpecificationBlock]:
+                                         verbose=False) -> List[BBasisFunctionsSpecificationBlock]:
     blocks_specifications_dict = generate_blocks_specifications_dict(potential_config)
 
     if unif_mus_ns_to_lsLScomb_dict is None:
@@ -640,10 +663,17 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
     for elements_vec, block_spec_dict in blocks_specifications_dict.items():
         if verbose:
             print("Block elements:", elements_vec)
+            
+        print(f"\n*** elements_vec {elements_vec} block_spec_dict {block_spec_dict}")
 
         ndensity = element_ndensity_dict[elements_vec[0]]
         spec_block = create_species_block(elements_vec, block_spec_dict, ndensity,
                                           func_coefs_initializer, unif_mus_ns_to_lsLScomb_dict)
+                                          
+        for f in spec_block.funcspecs:
+            print(f"*** {f}")
+        print("")
+
         if verbose:
             print(len(spec_block.funcspecs), " functions added")
         blocks_list.append(spec_block)
@@ -717,177 +747,61 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                                                                    )
 
                             current_block_func_spec_list.append(new_spec)
-        print(f"*** elements_vec {elements_vec} block_spec_dict {block_spec_dict}")
         spec_block.funcspecs = current_block_func_spec_list
     return spec_block
 
 
-def single_to_multispecies_converter(potential_config):
-    new_multi_species_potential_config = {}
-
-    if "deltaSplineBins" in potential_config:
-        new_multi_species_potential_config["deltaSplineBins"] = potential_config["deltaSplineBins"]
-    element = potential_config["element"]
-    new_multi_species_potential_config["elements"] = [element]
-
-    embeddings = {}
-    embeddings_kw_list = ["npot", "fs_parameters", "ndensity", "rho_core_cut", "drho_core_cut"]
-
-    for kw in embeddings_kw_list:
-        if kw in potential_config:
-            embeddings[kw] = potential_config[kw]
-
-    new_multi_species_potential_config["embeddings"] = {element: embeddings}
-
-    bonds = {}
-    bonds_kw_list = ["NameOfCutoffFunction",
-                     "core-repulsion",
-                     "dcut",
-                     "rcut",
-                     "radbase",
-                     "radparameters"]
-    for kw in bonds_kw_list:
-        if kw in potential_config:
-            bonds[kw] = potential_config[kw]
-
-    new_multi_species_potential_config["bonds"] = {element: bonds}
-
-    functions = {}
-    functions_kw_list = ["nradmax_by_orders", "lmin_by_orders", "lmax_by_orders", ]
-    for kw in functions_kw_list:
-        if kw in potential_config:
-            functions[kw] = potential_config[kw]
-    if "func_coefs_init" in potential_config:
-        functions["coefs_init"] = potential_config["func_coefs_init"]
-
-    new_multi_species_potential_config["functions"] = {element: functions}
-
-    return new_multi_species_potential_config
 
 
-def tail_sort(combs):
-    return tuple(list(combs[:1]) + sorted(combs[1:]))
 
 
-def species_tail_sorted_permutation(elements, r):
-    combs = set()
-    for comb in list(permutations(elements, r)):
-        comb = tail_sort(comb)
-        combs.add(comb)
-    return tuple(sorted(combs))
 
 
-def expand_trainable_parameters(elements: list, trainable_parameters: Union[str, list, dict] = None) -> dict:
-    if trainable_parameters is None:
-        trainable_parameters = []
-
-    if isinstance(trainable_parameters, str):
-        if trainable_parameters in ["func", "radial"]:
-            trainable_parameters = {"ALL": trainable_parameters}
-        else:
-            trainable_parameters = [trainable_parameters]
-
-    if len(trainable_parameters) == 0:
-        trainable_parameters = [ALL]
-
-    is_dict_format = isinstance(trainable_parameters, dict)
-
-    nelements = len(elements)
-    DEFAULT_PARAMS = ["func", "radial"]
-
-    # if trainable_parameters is list -> options=["radial","func"]
-    new_trainable_parameters_dict = {}
-
-    # check ALL keyword
-    if ALL in trainable_parameters:
-        params = trainable_parameters[ALL] if is_dict_format else DEFAULT_PARAMS
-
-        # wrap pure str into list
-        if isinstance(params, str):
-            params = [params]
-
-        if params == ["all"]:
-            params = DEFAULT_PARAMS
-
-        for r in range(1, nelements + 1):
-            for comb in species_tail_sorted_permutation(elements, r):
-                new_trainable_parameters_dict[comb] = params
-
-    # check NARY's keywords
-    for kw, r in NARY_MAP.items():
-        if kw in trainable_parameters:
-            params = trainable_parameters[kw] if is_dict_format else DEFAULT_PARAMS
-            # wrap pure str nto list
-            if isinstance(params, str):
-                params = [params]
-            if params == ["all"]:
-                params = DEFAULT_PARAMS
-            for comb in species_tail_sorted_permutation(elements, r):
-                new_trainable_parameters_dict[comb] = params
-
-    # check exact combinations
-    for comb in trainable_parameters:
-        if comb not in KEYWORDS:
-            # translate str -> to element tuple using regex
-            if isinstance(comb, str):
-                ext_comb = tuple(element_patt.findall(comb))
-            else:
-                ext_comb = comb
-
-            params = trainable_parameters[comb] if is_dict_format else DEFAULT_PARAMS
-            # wrap pure str nto list
-            if isinstance(params, str):
-                params = [params]
-            if params == ["all"]:
-                params = DEFAULT_PARAMS
-            new_trainable_parameters_dict[ext_comb] = params
-
-    # clear "radial" from r>2
-    new_trainable_parameters_dict_cleared = {}
-
-    for comb, params in new_trainable_parameters_dict.items():
-        params = params.copy()
-        r = len(comb)
-        if r > 2 and "radial" in params:
-            params.remove("radial")
-        elif r == 2:  # check the bonds symmetry
-            inv_comb = tuple(reversed(comb))
-            if ("radial" in comb) != ("radial" in inv_comb):
-                raise ValueError(
-                    "Inconsisteny setup of 'radial' parameters trainability for {} and {}:".format(comb, inv_comb) +
-                    "This option should be identical"
-                )
-
-        new_trainable_parameters_dict_cleared[comb] = params
-
-    return new_trainable_parameters_dict_cleared
 
 
-def compute_bbasisset_train_mask(bbasisconf: Union[BBasisConfiguration, ACEBBasisSet],
-                                 extended_trainable_parameters_dict: dict):
-    if isinstance(bbasisconf, BBasisConfiguration):
-        bbasis_set = ACEBBasisSet(bbasisconf)
-    elif isinstance(bbasisconf, ACEBBasisSet):
-        bbasis_set = bbasisconf
 
-    elements_to_ind_map = bbasis_set.elements_to_index_map
 
-    ind_trainable_parameters_dict = {tuple(elements_to_ind_map[el] for el in k): v for k, v in
-                                     extended_trainable_parameters_dict.items()}
-    crad_train_mask = np.zeros(len(bbasis_set.crad_coeffs_mask), dtype=bool)
-    basis_train_mask = np.zeros(len(bbasis_set.basis_coeffs_mask), dtype=bool)
 
-    crad_coeffs_mask = [tuple(c) for c in bbasis_set.crad_coeffs_mask]
-    basis_coeffs_mask = [tuple(c) for c in bbasis_set.basis_coeffs_mask]
 
-    for ind_comb, params in ind_trainable_parameters_dict.items():
-        if "radial" in params:
-            crad_train_mask = np.logical_or(crad_train_mask, [c == ind_comb for c in crad_coeffs_mask])
-        if "func" in params:
-            basis_train_mask = np.logical_or(basis_train_mask, [c == ind_comb for c in basis_coeffs_mask])
 
-    total_train_mask = np.concatenate((crad_train_mask, basis_train_mask))
-    return total_train_mask
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def is_mult_basisfunc_equivalent(func1: BBasisFunctionSpecification, func2: BBasisFunctionSpecification) -> bool:
@@ -1039,6 +953,9 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
     max_nlk_dict = defaultdict(lambda: defaultdict(int))
 
     for block_name, block in ext_blocks_dict.items():
+    
+        print(f"*** block_name {block_name} block {block}")
+
         for f in block.funcspecs:
             rank = len(f.ns)
             mu0 = f.elements[0]
@@ -1081,10 +998,11 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
 
         # skip more ternary and higher blocks, because bond specification are defined only in unary/binary blocks
         if len(k.split()) > 2:
-            block.radcoefficients = []
-            block.nradbaseij = 0
-            block.lmaxi = 0
-            block.nradmaxi = 0
+            print(f"*** k {k} block {block}")
+            #block.radcoefficients = []
+            #block.nradbaseij = 0
+            #block.lmaxi = 0
+            #block.nradmaxi = 0
             continue
 
         if block.nradbaseij < bonds_dict[k]["nradbase"]:
@@ -1099,60 +1017,13 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
         initialize_block_crad(block)
 
 
-def extend_multispecies_basis(initial_basis: BBasisConfiguration,
-                              final_basis: BBasisConfiguration,
-                              ladder_type="body_order",
-                              num_funcs=None,
-                              return_is_extended=False
-                              ) -> Tuple[BBasisConfiguration, bool]:
-    if num_funcs == 0:
-        if return_is_extended:
-            return initial_basis, False
-        else:
-            return initial_basis
 
-    # create a dict of block_name -> block for initial and final configs
-    initial_blocks_dict = {block.block_name: block for block in initial_basis.funcspecs_blocks}
-    final_blocks_dict = {block.block_name: block for block in final_basis.funcspecs_blocks}
 
-    # initialize accumulator lists
-    is_extended_list = []
-    extended_block_list = []
 
-    # 1. loop over final expected blocks
-    for f_block_name, f_block in final_blocks_dict.items():
-        # if such block exists in initial blocks
-        if f_block_name in initial_blocks_dict:
-            # take it
-            i_block = initial_blocks_dict[f_block_name]
-        else:
-            # otherwise need to create empty block as for f_block
-            i_block = f_block.copy()
-            # remove funcs and crad
-            i_block.funcspecs = []
-            i_block.radcoefficients = []
-            # set nradbase, lmax, nradmax to zero
-            i_block.lmaxi = 0
-            i_block.nradbaseij = 0
-            i_block.nradmaxi = 0
 
-        # growth from i_block to f_block
-        ext_block, is_extended = extend_basis_block(i_block, f_block, num_funcs, ladder_type)
-        #         print(ext_block.block_name,":",is_extended)
-        is_extended_list.append(is_extended)
-        extended_block_list.append(ext_block)
 
-    # check that all blocks in initial basis are copied into extended basis
-    for i_block_name, i_block in initial_blocks_dict.items():
-        if i_block_name not in final_blocks_dict:
-            extended_block_list.append(i_block)
 
-    is_basis_extended = np.any(is_extended_list)
-    extended_basis = final_basis.copy()
-    extended_basis.funcspecs_blocks = extended_block_list
-    validate_bonds_nradmax_lmax_nradbase(extended_basis)
-    extended_basis.validate(True)
-    if return_is_extended:
-        return extended_basis, is_basis_extended
-    else:
-        return extended_basis
+
+
+
+
