@@ -25,7 +25,6 @@ from lammps_pyace.basis import (
 # Import Python utilities
 from lammps_pyace.multispecies_basisextension import (
     create_multispecies_basis_config,
-    extend_multispecies_basis,
     generate_species_keys,
 )
 
@@ -46,7 +45,6 @@ __all__ = [
     # Main functions
     'create_multispecies_basis_config',
     'construct_bbasisconfiguration',
-    'extend_multispecies_basis',
     'extend_basis',
     'generate_species_keys',
     
