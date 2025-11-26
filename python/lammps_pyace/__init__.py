@@ -23,15 +23,8 @@ from lammps_pyace.basis import (
 )
 
 # Import Python utilities
-from lammps_pyace.multispecies_basisextension import (
-    create_multispecies_basis_config,
-    generate_species_keys,
-)
+from lammps_pyace.multispecies_basisextension import create_multispecies_basis_config
 
-from lammps_pyace.basisextension import (
-    construct_bbasisconfiguration,
-    extend_basis,
-)
 
 __all__ = [
     # Main classes
@@ -53,4 +46,4 @@ __all__ = [
     'FexpShiftedScaled',
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.3.0"

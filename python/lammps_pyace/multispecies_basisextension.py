@@ -466,17 +466,14 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
     bonds_ext = update_bonds_ext(bonds_ext, functions_ext)
 
     ### Combine together to have block_spec specs
-    # print(f"*** generate_blocks_specifications_dict() functions_ext {functions_ext}")
     block_spec_dict = deepcopy(functions_ext)
 
     # update with embedding info
-    # print(f"*** generate_blocks_specifications_dict() embeddings_ext {embeddings_ext}")
     for key, emb_ext_val in embeddings_ext.items():
         if key in block_spec_dict:
             block_spec_dict[key].update(emb_ext_val)
             
     # update with bond info
-    # print(f"*** generate_blocks_specifications_dict() bonds_ext {bonds_ext}")
     for key, bonds_ext_val in bonds_ext.items():
         if len(set(key)) == 1:
             key = (key[0],)
@@ -611,7 +608,7 @@ def update_bonds_ext(bonds_ext, functions_ext):
                 funcs_spec['dcut'] = max(funcs_spec['dcut'], bonds_bkey['dcut'])
                 funcs_spec['rcut_in'] = max(funcs_spec['rcut_in'], bonds_bkey['rcut_in'])
                 funcs_spec['dcut_in'] = max(funcs_spec['dcut_in'], bonds_bkey['dcut_in'])
-                print(f"*** key {key} bkey {bkey} bonds_bkey {bonds_bkey} funcs_spec {funcs_spec}")
+                # print(f"*** key {key} bkey {bkey} bonds_bkey {bonds_bkey} funcs_spec {funcs_spec}")
 
             if 'nradbase' not in bond:
                 if bonds_ext_updated[bkey].get('nradbase', 0) < nradbasemax:
@@ -707,6 +704,8 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
             ns_range = range(1, nmax + 1)
 
             for mus_comb in combinations_with_replacement(elms, rank):
+            #for mus_comb in [elements_vec[1:]]:
+                print(f"*** rank {rank} nmax {nmax} lmin {lmin} lmax {lmax} mus_comb {mus_comb}")
                 mus_comb_ext = tuple([central_atom] + list(mus_comb))  # central atom + ordered tail
                 current_nary = len(set(mus_comb_ext))
                 if current_nary != nary:
@@ -954,7 +953,7 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
 
     for block_name, block in ext_blocks_dict.items():
     
-        print(f"*** block_name {block_name} block {block}")
+        # print(f"*** block_name {block_name} block {block}")
 
         for f in block.funcspecs:
             rank = len(f.ns)
@@ -998,7 +997,7 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
 
         # skip more ternary and higher blocks, because bond specification are defined only in unary/binary blocks
         if len(k.split()) > 2:
-            print(f"*** k {k} block {block}")
+            #print(f"*** k {k} block {block}")
             #block.radcoefficients = []
             #block.nradbaseij = 0
             #block.lmaxi = 0
