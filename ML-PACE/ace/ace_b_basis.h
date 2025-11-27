@@ -55,7 +55,7 @@ Split a given string by tabs or space
 
 @returns splitted, string - the string after splitting
 */
-vector<string> split_key(string mainkey);
+vector<string> split_key(const string& s);
 
 
 /**

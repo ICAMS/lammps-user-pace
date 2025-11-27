@@ -452,16 +452,12 @@ void ACEBBasisSet::pack_flatten_basis() {
 
 }
 
-
-vector<string> split_key(string mainkey) {
-
-    vector<string> splitted;
-    istringstream stream(mainkey);
-
-    for (string mainkey; stream >> mainkey;)
-        splitted.emplace_back(mainkey);
-
-    return splitted;
+vector<string> split_key(const string& s) {
+    vector<string> out;
+    string token;
+    istringstream iss(s);
+    while (iss >> token) out.push_back(token);
+    return out;
 }
 
 void ACEBBasisSet::load(string filename) {
@@ -972,10 +968,9 @@ void ACEBBasisSet::initialize_basis(BBasisConfiguration &basisSetup) {
     //  - rho_core_cutoffs, drho_core_cutoffs and FS_parameters
     for (auto &func_spec_block: basisSetup.funcspecs_blocks) {
         //below, only pair_species blocks (i.e. A-A or A-B) are considered
-        if (func_spec_block.number_of_species > 2) continue;
+        if (func_spec_block.elements_vec.size() != 2) continue;
 
         //common part for 1- and 2-species blocks:
-
 
         SPECIES_TYPE ele_i = elements_to_index_map[func_spec_block.elements_vec[0]];
         SPECIES_TYPE ele_j;
@@ -1013,7 +1008,9 @@ void ACEBBasisSet::initialize_basis(BBasisConfiguration &basisSetup) {
             auto symm_bond_spec = map_bond_specifications.at(symm_bond);
             if (symm_bond_spec != bondSpecification) {
                 stringstream ss;
-                ss << "Bonds specifications for pair (" << (int) ele_i << "," << (int) ele_j << ") are inconsistent";
+                ss << "Bonds specifications for pair (" << (int) ele_i << "," << (int) ele_j << ") are inconsistent" << endl;
+                ss << "symm_bond_spec: " << symm_bond_spec.to_string() << endl;
+                ss << "bondSpecification: " << bondSpecification.to_string() << endl;
                 throw invalid_argument(ss.str());
             }
         }
@@ -1587,17 +1584,8 @@ void BBasisFunctionsSpecificationBlock::update_params() {
 
     this->elements_vec = split_key(this->block_name);
 
-    //duplicate elements_vec if single-species case
-    if (this->elements_vec.size() == 1)
-        this->elements_vec.emplace_back(this->elements_vec[0]);
-
-    set<string> elements_set;
-    for (auto const &el: this->elements_vec)
-        if (elements_set.count(el) == 0)
-            elements_set.insert(el);
-
     this->rankmax = block_rankmax;
-    this->number_of_species = elements_set.size();
+    this->number_of_species = elements_vec.size();
     this->mu0 = this->elements_vec[0];
 }
 
