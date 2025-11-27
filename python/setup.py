@@ -55,14 +55,14 @@ class CMakeBuild(build_ext):
 
 setup(
     name='lammps_pyace',
-    version='0.1.0',
-    author='Mitchell Wood',
+    version='0.3.0',
+    author='alphataubio',
     description='Python bindings for ML-PACE (Atomic Cluster Expansion)',
     long_description=open('README.md').read() if os.path.exists('README.md') else '',
     long_description_content_type='text/markdown',
     packages=find_packages(),
     package_data={
-        'lammps_pyace': ['data/*.pckl'],
+        'lammps_pyace': ['*.pckl'],
     },
     ext_modules=[CMakeExtension('lammps_pyace.basis', sourcedir='.')],
     cmdclass={'build_ext': CMakeBuild},
