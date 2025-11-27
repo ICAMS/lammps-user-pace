@@ -29,6 +29,7 @@ project(lammps_pyace_python LANGUAGES CXX)
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
 # -------------------------------- yaml-cpp --------------------------------
+
 find_package(yaml-cpp QUIET)
 
 if(NOT yaml-cpp_FOUND)
@@ -51,6 +52,7 @@ else()
 endif()
 
 # -------------------------------- cnpy --------------------------------
+
 find_package(cnpy QUIET)
 
 if(NOT cnpy_FOUND)
@@ -75,6 +77,7 @@ endif()
 
 # -------------------------------- wigner-cpp --------------------------------
 # this is header-only library
+
 set(WIGNER_PATH ../wigner-cpp)
 set(WIGNER_INCLUDE_PATH ${WIGNER_PATH}/include)
 
@@ -86,26 +89,17 @@ install(DIRECTORY wigner
 
 # -------------------------------- pybind --------------------------------
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/pybind11/CMakeLists.txt")
-    message(STATUS "Using bundled pybind11")
-    add_subdirectory("${CMAKE_SOURCE_DIR}/pybind11" pybind11-build)
-else()
-    message(STATUS "Bundled pybind11 not found, using FetchContent")
-    include(FetchContent)
-    FetchContent_Declare(
-        pybind11
-        GIT_REPOSITORY https://github.com/pybind/pybind11.git
-        GIT_TAG v2.11.1
-    )
-    FetchContent_MakeAvailable(pybind11)
-endif()
+include(FetchContent)
+FetchContent_Declare(
+  pybind11
+  GIT_REPOSITORY https://github.com/pybind/pybind11.git
+  GIT_TAG v2.13.6
+)
+FetchContent_MakeAvailable(pybind11)
 
 # -------------------------------- basis --------------------------------
 
-message(STATUS ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
-# Don't override output directories - let setup.py control this
-# set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE build)
-# set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG build)
+message(STATUS "CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 
 set(ML_PACE "../ML-PACE")
 set(ACE ${ML_PACE}/ace)
@@ -133,21 +127,10 @@ set(SOURCES_BASIS "${ACE_EVALUATOR}/ace_c_basis.cpp"
         "${HELPERS}/ace_c_basis_helper.cpp"
   )
   
-
 pybind11_add_module(basis ${SOURCES_BASIS} )
 target_include_directories(basis PRIVATE ${WIGNER_INCLUDE_PATH})
 target_link_libraries(basis PRIVATE yaml-cpp::yaml-cpp cnpy::cnpy)
-#set_target_properties(basis PROPERTIES OUTPUT_NAME "basis")
-
 target_compile_options(basis PRIVATE -Wno-deprecated-declarations)
-
-
-
-
-#if (CMAKE_COMPILER_IS_GNUCC)
-#  target_compile_options(basis PRIVATE -Wunused-variable -Wvla -Wno-effc++ -Werror=vla)
-#endif ()
-
 set(deps_targets "")
 
 if(BUILD_YAML_CPP)
