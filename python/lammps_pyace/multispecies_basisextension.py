@@ -311,13 +311,10 @@ def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
 
     # update with embedding info
     for key, emb_ext_val in embeddings_ext.items():
-        if key in block_spec_dict:
-            block_spec_dict[key].update(emb_ext_val)
+        block_spec_dict.setdefault(key, {}).update(emb_ext_val)
             
     # update with bond info
     for key, bonds_ext_val in bonds_ext.items():
-        #if len(set(key)) == 1:
-        #    key = (key[0],)
         if key in block_spec_dict:
             block_spec_dict[key].update(bonds_ext_val)
             
@@ -359,7 +356,7 @@ def generate_functions_ext(potential_config):
             functions_ext[key].update(functions[k])
 
     # drop all keys, that has no specifications
-    #functions_ext = {k: v for k, v in functions_ext.items() if len(v) > 0}
+    functions_ext = {k: v for k, v in functions_ext.items() if len(v) > 0}
 
     return functions_ext
 
@@ -425,7 +422,7 @@ def update_bonds_ext(bonds_ext, functions_ext):
     
         if rank == 0: continue
         
-        print(f"*** key {key} funcs_spec {funcs_spec}")
+        # print(f"*** key {key} funcs_spec {funcs_spec}")
         
         nradmax = 0
         if 'nmax_by_rank' in funcs_spec:
@@ -433,9 +430,9 @@ def update_bonds_ext(bonds_ext, functions_ext):
             if len(funcs_spec['nmax_by_rank'][1:]) > 0:
                 nradmax = max(funcs_spec['nmax_by_rank'][1:])
         
-        lmax = 0
+        lmax = funcs_spec.get('lmax', 0)
         if 'lmax_by_rank' in funcs_spec:
-            lmax_by_rank = max(funcs_spec['lmax_by_rank'])
+            lmax = max( [lmax] + funcs_spec['lmax_by_rank'])
         
         if len(key) > 2:
             funcs_spec['nradmax'] = max(nradmax, nradbasemax)
@@ -498,7 +495,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
     
     # print(f"*** blocks_specifications_dict")
     # for k,v in blocks_specifications_dict.items():
-    #    print(f"*** {k}: {v}")
+    #     print(f"*** {k}: {v}")
     # print(f"")
 
     element_ndensity_dict =  element_ndensity_dict or {}
@@ -535,7 +532,7 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
     rank = len(elements_vec)-1
     unif_abs_combs_set = set()
     
-    # print(f"*** block_spec_dict {block_spec_dict}")
+    # print(f"*** elements_vec {elements_vec} block_spec_dict {block_spec_dict}")
         
     if 'nmax' in block_spec_dict:
         nmax = block_spec_dict['nmax']
@@ -811,19 +808,16 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
         if len(bond_pair) == 2:
             sym_bond_pair = (bond_pair[1], bond_pair[0])
             sym_dct = max_nlk_dict[sym_bond_pair]
-            max_nradbase = max(dct["nradbase"], sym_dct["nradbase"])
-            max_lmax = max(dct["lmax"], sym_dct["lmax"])
-            max_nradmax = max(dct["nradmax"], sym_dct["nradmax"])
+            max_nradbase = max(dct['nradbase'], sym_dct['nradbase'])
+            max_lmax = max(dct['lmax'], sym_dct['lmax'])
+            max_nradmax = max(dct['nradmax'], sym_dct['nradmax'])
 
-            max_nlk_dict[bond_pair]["nradbase"] = max_nlk_dict[sym_bond_pair]["nradbase"] = max_nradbase
-            max_nlk_dict[bond_pair]["lmax"] = max_nlk_dict[sym_bond_pair]["lmax"] = max_lmax
-            max_nlk_dict[bond_pair]["nradmax"] = max_nlk_dict[sym_bond_pair]["nradmax"] = max_nradmax
+            max_nlk_dict[bond_pair]['nradbase'] = max_nlk_dict[sym_bond_pair]['nradbase'] = max_nradbase
+            max_nlk_dict[bond_pair]['lmax'] = max_nlk_dict[sym_bond_pair]['lmax'] = max_lmax
+            max_nlk_dict[bond_pair]['nradmax'] = max_nlk_dict[sym_bond_pair]['nradmax'] = max_nradmax
 
     bonds_dict = {}
     for k, v in max_nlk_dict.items():
-        #if k[0] == k[1]:
-        #    bonds_dict[k[0]] = v
-        #else:
         bonds_dict[" ".join(k)] = v
             
     for block in ext_basis.funcspecs_blocks:
