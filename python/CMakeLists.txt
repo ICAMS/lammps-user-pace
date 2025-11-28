@@ -134,6 +134,8 @@ target_include_directories(basis PRIVATE
     ${ML_PACE}
     ${HELPERS}
 )
+message(STATUS "YAML_CPP_TARGET = ${YAML_CPP_TARGET}")
+message(STATUS "BUILD_YAML_CPP = ${BUILD_YAML_CPP}")
 target_link_libraries(basis PRIVATE ${YAML_CPP_TARGET} cnpy::cnpy)
 target_compile_options(basis PRIVATE -Wno-deprecated-declarations)
 set(deps_targets "")
