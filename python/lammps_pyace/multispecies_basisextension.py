@@ -11,7 +11,7 @@ from typing import Dict, List, Union, Tuple
 
 from lammps_pyace import ACEBBasisSet, BBasisConfiguration, BBasisFunctionSpecification, BBasisFunctionsSpecificationBlock
 
-element_patt = re.compile("([A-Z][a-z]?)")
+element_patt = re.compile("([A-Z][a-z]?) ?")
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -191,22 +191,6 @@ def generate_species_keys(elements, r):
     return sorted(keys)
 
 
-def generate_all_species_keys(elements):
-    """
-    Generate all ordered in [1:...] slice permutations of elements,
-    that would be the species blocks names
-
-    :param elements: list of elements (str)
-    :return: list of all generated block names
-    """
-    keys = []
-    nelements = len(elements)
-    for r in range(0, nelements + 1):
-        for key in generate_species_keys(elements, r):
-            keys.append(key)
-    return keys
-
-
 def species_key_to_bonds(key):
     """
     Unify the tuple `key` to a list of bond pairs:
@@ -357,15 +341,21 @@ def generate_functions_ext(potential_config):
     functions_ext = defaultdict(dict)
 
     if ALL in functions:
-        max_rank = len(functions[ALL]['nradmax_by_orders'])
+        max_rank = len(functions[ALL]['nmax_by_rank'])
         for rank in range(0, max_rank+1):
             for species in generate_species_keys(elements, rank):
                 if rank == 0:
                     functions_ext[species].update({})
                 else:
-                    for key in ['nradmax_by_orders', 'lmin_by_orders', 'lmax_by_orders']:
-                        if key in functions[ALL]:
-                            functions_ext[species][key] = functions[ALL][key][:rank]
+                    nmax_by_rank = functions[ALL].get('nmax_by_rank', [1]*rank)
+                    lmin_by_rank = functions[ALL].get('lmin_by_rank', [0]*rank)
+                    lmax_by_rank = functions[ALL].get('lmax_by_rank', [0]*rank)
+                    functions_ext[species]['nmax_by_rank'] = nmax_by_rank
+                    functions_ext[species]['lmin_by_rank'] = lmin_by_rank
+                    functions_ext[species]['lmax_by_rank'] = lmax_by_rank
+                    functions_ext[species]['nmax'] = nmax_by_rank[rank-1] if rank<=len(nmax_by_rank) else 1
+                    functions_ext[species]['lmin'] = lmin_by_rank[rank-1] if rank<=len(lmin_by_rank) else 0
+                    functions_ext[species]['lmax'] = lmax_by_rank[rank-1] if rank<=len(lmax_by_rank) else 0
             
     for nary_key, nary_val in NARY_MAP.items():
         if nary_key in functions:
@@ -453,14 +443,18 @@ def update_bonds_ext(bonds_ext, functions_ext):
     # run through functions specifications and update/validate bond's nradbase, nradmax, lmax
     for key, funcs_spec in functions_ext.items():
     
-        if len(key) < 2: continue
+        rank = len(key) - 1
     
-        nradbasemax = max(funcs_spec['nradmax_by_orders'][:1])
-        if len(funcs_spec['nradmax_by_orders'][1:]) > 0:
-            nradmax = max(funcs_spec['nradmax_by_orders'][1:])
+        if rank == 0: continue
+        
+        #print(f"*** key {key} funcs_spec {funcs_spec}")
+    
+        nradbasemax = max(funcs_spec['nmax_by_rank'][:1])
+        if len(funcs_spec['nmax_by_rank'][1:]) > 0:
+            nradmax = max(funcs_spec['nmax_by_rank'][1:])
         else:
             nradmax = 0
-        lmax = max(funcs_spec['lmax_by_orders'])
+        lmax = max(funcs_spec['lmax_by_rank'])
         
         if len(key) > 2:
             funcs_spec['nradmax'] = max(nradmax, nradbasemax)
@@ -478,6 +472,7 @@ def update_bonds_ext(bonds_ext, functions_ext):
                     
             if len(key)>2:
                 bonds_bkey = bonds_ext_updated[bkey]
+                #print(f"*** bonds_bkey {bonds_bkey}")
                 funcs_spec['radparameters'] = bonds_bkey['radparameters']
                 funcs_spec['core-repulsion'] = bonds_bkey['core-repulsion']
                 funcs_spec['rcut'] = min(funcs_spec['rcut'], bonds_bkey['rcut'])
@@ -507,7 +502,7 @@ def update_bonds_ext(bonds_ext, functions_ext):
             else:
                 if bond['lmax'] < lmax:
                     raise ValueError(f"lmax={bond['lmax']} for bond {bkey} " + \
-                                     f"is less than nradmax={lmax} from {key}")
+                                     f"is less than lmax={lmax} from {key}")
                                      
     return bonds_ext_updated
 
@@ -520,10 +515,10 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
                                          
     blocks_specifications_dict = generate_blocks_specifications_dict(potential_config)
     
-    #print(f"*** blocks_specifications_dict")
-    #for k,v in blocks_specifications_dict.items():
+    # print(f"*** blocks_specifications_dict")
+    # for k,v in blocks_specifications_dict.items():
     #    print(f"*** {k}: {v}")
-    #print(f"")
+    # print(f"")
 
     element_ndensity_dict =  element_ndensity_dict or {}
     constr_element_ndensity_dict = get_element_ndensity_dict(blocks_specifications_dict)
@@ -552,65 +547,59 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
                          ndensity: int,
                          func_coefs_initializer="zero",
                          unif_mus_ns_to_lsLScomb_dict=None) -> BBasisFunctionsSpecificationBlock:
-    central_atom = elements_vec[0]
 
-    elms = tuple(sorted(set(elements_vec)))
-    nary = len(elms)
+    central_atom = elements_vec[0]
     spec_block = create_species_block_without_funcs(elements_vec, block_spec_dict)
     current_block_func_spec_list = []
-    if "nradmax_by_orders" in block_spec_dict and "lmax_by_orders" in block_spec_dict:
-        rank = len(elements_vec)-1
-        unif_abs_combs_set = set()
+    rank = len(elements_vec)-1
+    unif_abs_combs_set = set()
+    
+    # print(f"*** block_spec_dict {block_spec_dict}")
         
-        nmax = block_spec_dict["nradmax_by_orders"][rank-1]
-        lmax = block_spec_dict["lmax_by_orders"][rank-1]
-        
-        if "lmin_by_orders" in block_spec_dict:
-            lmin = block_spec_dict["lmin_by_orders"][rank-1]
-        else:
-            lmin = 0
-            
-        ns_range = range(1, nmax + 1)
-        mus_comb = elements_vec[1:]
-        mus_comb_ext = tuple([central_atom] + list(mus_comb))  # central atom + ordered tail
+    if 'nmax' in block_spec_dict:
+        nmax = block_spec_dict['nmax']
+        lmin = block_spec_dict['lmin']
+        lmax = block_spec_dict['lmax']
+    else:
+        return spec_block
+
+    ns_range = range(1, nmax + 1)
+    mus_comb = elements_vec[1:]
+    mus_comb_ext = tuple([central_atom] + list(mus_comb))  # central atom + ordered tail
        
-        for ns_comb in product(ns_range, repeat=rank):  # exhaustive list
-            unif_abs_comb = unify_absolute_mus_ns_comb(mus_comb, ns_comb)
-            if unif_abs_comb in unif_abs_combs_set:
-                continue
-            unif_abs_combs_set.add(unif_abs_comb)
-            unif_comb = unify_mus_ns_comb(mus_comb, ns_comb)
-            if unif_comb not in unif_mus_ns_to_lsLScomb_dict:
-                raise ValueError(
-                    "Specified potential shape is too big " + \
-                    "and goes beyond the precomputed BBasisFunc white-list" + \
-                    "for unified combination {}".format(unif_comb))
+    for ns_comb in product(ns_range, repeat=rank):  # exhaustive list
+        unif_abs_comb = unify_absolute_mus_ns_comb(mus_comb, ns_comb)
+        if unif_abs_comb in unif_abs_combs_set:
+            continue
+        unif_abs_combs_set.add(unif_abs_comb)
+        unif_comb = unify_mus_ns_comb(mus_comb, ns_comb)
+        if unif_comb not in unif_mus_ns_to_lsLScomb_dict:
+            raise ValueError(
+                "Specified potential shape is too big and goes beyond the precomputed" + \
+                "BBasisFunc white-list for unified combination {}".format(unif_comb))
 
-            mus_ns_white_list = unif_mus_ns_to_lsLScomb_dict[unif_comb]  # only ls, LS are important
+        mus_ns_white_list = unif_mus_ns_to_lsLScomb_dict[unif_comb]  # only ls, LS are important
                 
-            for (pre_ls, pre_LS) in mus_ns_white_list:
-                if lmin <= min(pre_ls) and max(pre_ls) <= lmax:
-                    if "coefs_init" in block_spec_dict:
-                        func_coefs_initializer = block_spec_dict["coefs_init"]
-
-                    if func_coefs_initializer == "zero":
-                        coefs = [0] * ndensity
-                    elif func_coefs_initializer == "random":
-                        coefs = np.random.randn(ndensity) * 1e-4
-                    else:
-                        raise ValueError(
-                            "Unknown func_coefs_initializer={}. Could be only 'zero' or 'random'".format(func_coefs_initializer))
+        for (pre_ls, pre_LS) in mus_ns_white_list:
+            if lmin <= min(pre_ls) and max(pre_ls) <= lmax:
+                if "coefs_init" in block_spec_dict:
+                    func_coefs_initializer = block_spec_dict["coefs_init"]
                     
-                    new_spec = BBasisFunctionSpecification(elements=mus_comb_ext,
-                                                               ns=ns_comb,
-                                                               ls=pre_ls,
-                                                               LS=pre_LS,
-                                                               coeffs=coefs
-                                                            )
+                if func_coefs_initializer == "zero":
+                    coefs = [0] * ndensity
+                elif func_coefs_initializer == "random":
+                    coefs = np.random.randn(ndensity) * 1e-4
+                else:
+                    raise ValueError(
+                        "Unknown func_coefs_initializer={}. Could be only 'zero' or 'random'".format(func_coefs_initializer))
+                    
+                new_spec = BBasisFunctionSpecification(elements=mus_comb_ext, ns=ns_comb,
+                                                       ls=pre_ls, LS=pre_LS, coeffs=coefs)
 
-                    current_block_func_spec_list.append(new_spec)
+                current_block_func_spec_list.append(new_spec)
                         
-        spec_block.funcspecs = current_block_func_spec_list
+    spec_block.funcspecs = current_block_func_spec_list
+    
     return spec_block
 
 
@@ -830,11 +819,11 @@ def validate_bonds_nradmax_lmax_nradbase(ext_basis: BBasisConfiguration):
                 bond = (mu0, mu)
 
                 if rank == 1:
-                    max_nlk_dict[bond]["nradbase"] = max(max_nlk_dict[bond]["nradbase"], n)
+                    max_nlk_dict[bond]['nradbase'] = max(max_nlk_dict[bond]['nradbase'], n)
                 else:
-                    max_nlk_dict[bond]["nradmax"] = max(max_nlk_dict[bond]["nradmax"], n)
+                    max_nlk_dict[bond]['nradmax'] = max(max_nlk_dict[bond]['nradmax'], n)
 
-                max_nlk_dict[bond]["lmax"] = max(max_nlk_dict[bond]["lmax"], l)
+                max_nlk_dict[bond]['lmax'] = max(max_nlk_dict[bond]['lmax'], l)
 
     # loop over max_nlk_dict and symmetrize pair bonds
     for bond_pair, dct in max_nlk_dict.items():
