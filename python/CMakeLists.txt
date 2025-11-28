@@ -30,7 +30,8 @@ find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
 # -------------------------------- yaml-cpp --------------------------------
 
-find_package(yaml-cpp QUIET)
+# Force building yaml-cpp from source to avoid broken system packages
+set(yaml-cpp_FOUND FALSE)
 
 if(NOT yaml-cpp_FOUND)
     # enforce building libyaml-cpp as static library and turn off optional features
