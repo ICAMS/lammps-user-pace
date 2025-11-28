@@ -34,11 +34,16 @@ find_package(yaml-cpp QUIET)
 
 if(NOT yaml-cpp_FOUND)
     # enforce building libyaml-cpp as static library and turn off optional features
-    set(YAML_BUILD_SHARED_LIBS OFF)
-    set(YAML_CPP_BUILD_CONTRIB OFF)
-    set(YAML_CPP_BUILD_TOOLS OFF)
+    set(YAML_BUILD_SHARED_LIBS OFF CACHE INTERNAL "")
+    set(YAML_CPP_BUILD_CONTRIB OFF CACHE INTERNAL "")
+    set(YAML_CPP_BUILD_TOOLS OFF CACHE INTERNAL "")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp build-yaml-cpp)
-    add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp-pace)
+    
+    # yaml-cpp CMakeLists.txt creates target yaml-cpp-pace
+    # Create alias yaml-cpp::yaml-cpp for compatibility with find_package(yaml-cpp)
+    if(TARGET yaml-cpp-pace AND NOT TARGET yaml-cpp::yaml-cpp)
+        add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp-pace)
+    endif()
 
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp/include/yaml-cpp
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
