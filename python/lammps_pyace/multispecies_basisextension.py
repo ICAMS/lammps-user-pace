@@ -541,7 +541,7 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
     else:
         return spec_block
 
-    ns_range = range(1, nmax + 1)
+    ns_range = range(1, nmax + 1) if rank<5 else [2,4]
     mus_comb = elements_vec[1:]
     mus_comb_ext = tuple([central_atom] + list(mus_comb))  # central atom + ordered tail
        
