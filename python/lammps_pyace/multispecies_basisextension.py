@@ -16,15 +16,6 @@ element_patt = re.compile("([A-Z][a-z]?) ?")
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
-ALL = "ALL"
-UNARY = "UNARY"
-BINARY = "BINARY"
-TERNARY = "TERNARY"
-QUATERNARY = "QUATERNARY"
-QUINARY = "QUINARY"
-KEYWORDS = [ALL, UNARY, BINARY, TERNARY, QUATERNARY, QUINARY, 'number_of_functions_per_element']
-
-NARY_MAP = {UNARY: 1, BINARY: 2, TERNARY: 3, QUATERNARY: 4, QUINARY: 5}
 PERIODIC_ELEMENTS = chemical_symbols = [
     'H', 'He',
     'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne',
@@ -295,19 +286,19 @@ def get_element_ndensity_dict(block_spec_dict):
 def generate_blocks_specifications_dict(potential_config: Dict) -> Dict:
 
     ### Embeddings
-    ### possible keywords: ALL, UNARY  + el
+    ### possible keywords: 'ALL', 'Aa'
     if "embeddings" in potential_config:
         embeddings_ext = generate_embeddings_ext(potential_config)
     else:
         embeddings_ext = {}
     ### Bonds
-    ### possible keywords: ALL, UNARY, BINARY + (el,el)
+    ### possible keywords: 'ALL', 'Aa Bb'
     if "bonds" in potential_config:
         bonds_ext = generate_bonds_ext(potential_config)
     else:
         bonds_ext = {}
     ### Functions
-    ### possible keywords: ALL, UNARY, BINARY, TERNARY, QUATERNARY, QUINARY + (el,el,...)
+    ### possible keywords: 'ALL', 'Aa Bb', 'Aa Bb Cc', 'Aa Bb Cc Dd', 'Aa Bb Cc Dd Ee'
     if "functions" in potential_config:
         functions_ext = generate_functions_ext(potential_config)
     else:
@@ -340,30 +331,25 @@ def generate_functions_ext(potential_config):
     functions = potential_config["functions"].copy()
     functions_ext = defaultdict(dict)
 
-    if ALL in functions:
-        max_rank = len(functions[ALL]['nmax_by_rank'])
+    if 'ALL' in functions:
+        max_rank = len(functions['ALL']['nmax_by_rank'])
         for rank in range(0, max_rank+1):
             for species in generate_species_keys(elements, rank):
                 if rank == 0:
                     functions_ext[species].update({})
                 else:
-                    nmax_by_rank = functions[ALL].get('nmax_by_rank', [1]*rank)
-                    lmin_by_rank = functions[ALL].get('lmin_by_rank', [0]*rank)
-                    lmax_by_rank = functions[ALL].get('lmax_by_rank', [0]*rank)
+                    nmax_by_rank = functions['ALL'].get('nmax_by_rank', [1]*rank)
+                    lmin_by_rank = functions['ALL'].get('lmin_by_rank', [0]*rank)
+                    lmax_by_rank = functions['ALL'].get('lmax_by_rank', [0]*rank)
                     functions_ext[species]['nmax_by_rank'] = nmax_by_rank
                     functions_ext[species]['lmin_by_rank'] = lmin_by_rank
                     functions_ext[species]['lmax_by_rank'] = lmax_by_rank
                     functions_ext[species]['nmax'] = nmax_by_rank[rank-1] if rank<=len(nmax_by_rank) else 1
                     functions_ext[species]['lmin'] = lmin_by_rank[rank-1] if rank<=len(lmin_by_rank) else 0
                     functions_ext[species]['lmax'] = lmax_by_rank[rank-1] if rank<=len(lmax_by_rank) else 0
-            
-    for nary_key, nary_val in NARY_MAP.items():
-        if nary_key in functions:
-            for key in generate_species_keys(elements, r=nary_val):
-                functions_ext[key].update(functions[nary_key])
                 
     for k in functions:
-        if k not in KEYWORDS:
+        if k != 'ALL':
             if isinstance(k, str):  # single species string
                 key = tuple(element_patt.findall(k))
             else:
@@ -383,17 +369,11 @@ def generate_bonds_ext(potential_config):
 
     bonds = potential_config["bonds"].copy()
     bonds_ext = {pair: {} for pair in product(elements, repeat=2)}
-    if ALL in bonds:
+    if 'ALL' in bonds:
         for pair in bonds_ext:
-            bonds_ext[pair].update(bonds[ALL])
-    if UNARY in bonds:
-        for el in elements:
-            bonds_ext[(el, el)].update(bonds[UNARY])
-    if BINARY in bonds:
-        for pair in permutations(elements, 2):
-            bonds_ext[pair].update(bonds[BINARY])
+            bonds_ext[pair].update(bonds['ALL'])
     for pair in bonds:
-        if pair not in KEYWORDS:  # assume that pair is valid (el1, el2)
+        if pair != 'ALL':  # assume that pair is valid (el1, el2)
             if isinstance(pair, str):
                 # dpair= (pair, pair)
                 # use regex to
@@ -416,17 +396,14 @@ def generate_embeddings_ext(potential_config):
 
     embeddings = potential_config["embeddings"].copy()
     embeddings_ext = {(el,): {} for el in elements}
-    # ALL and UNARY behave identically
-    if ALL in embeddings:
+    
+    if 'ALL' in embeddings:
         for el in elements:
-            embeddings_ext[(el,)].update(embeddings[ALL])
-    if UNARY in embeddings:
-        for el in elements:
-            embeddings_ext[(el,)].update(embeddings[UNARY])
+            embeddings_ext[(el,)].update(embeddings['ALL'])
     for el, val in embeddings.items():
         if el in elements:
             embeddings_ext[(el,)].update(val)
-        elif el not in [ALL, UNARY]:
+        elif el not in ['ALL']:
             raise ValueError(f"{el} is not in specified elements: {elements}")
 
     # drop all keys, that has no specifications
