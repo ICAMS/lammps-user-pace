@@ -354,7 +354,8 @@ def generate_functions_ext(potential_config):
                 key = tuple(element_patt.findall(k))
             else:
                 key = tuple(k)
-            # TODO extend permutations
+            if 'lmin' not in functions[k]:
+                functions[k]['lmin'] = 0
             functions_ext[key].update(functions[k])
 
     # drop all keys, that has no specifications
@@ -424,14 +425,17 @@ def update_bonds_ext(bonds_ext, functions_ext):
     
         if rank == 0: continue
         
-        #print(f"*** key {key} funcs_spec {funcs_spec}")
-    
-        nradbasemax = max(funcs_spec['nmax_by_rank'][:1])
-        if len(funcs_spec['nmax_by_rank'][1:]) > 0:
-            nradmax = max(funcs_spec['nmax_by_rank'][1:])
-        else:
-            nradmax = 0
-        lmax = max(funcs_spec['lmax_by_rank'])
+        print(f"*** key {key} funcs_spec {funcs_spec}")
+        
+        nradmax = 0
+        if 'nmax_by_rank' in funcs_spec:
+            nradbasemax = max(funcs_spec['nmax_by_rank'][:1])
+            if len(funcs_spec['nmax_by_rank'][1:]) > 0:
+                nradmax = max(funcs_spec['nmax_by_rank'][1:])
+        
+        lmax = 0
+        if 'lmax_by_rank' in funcs_spec:
+            lmax_by_rank = max(funcs_spec['lmax_by_rank'])
         
         if len(key) > 2:
             funcs_spec['nradmax'] = max(nradmax, nradbasemax)
