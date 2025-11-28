@@ -37,10 +37,10 @@ if(NOT yaml-cpp_FOUND)
     set(YAML_BUILD_SHARED_LIBS OFF)
     set(YAML_CPP_BUILD_CONTRIB OFF)
     set(YAML_CPP_BUILD_TOOLS OFF)
-    add_subdirectory(yaml-cpp build-yaml-cpp)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp build-yaml-cpp)
     add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp-pace)
 
-    install(DIRECTORY yaml-cpp/include/yaml-cpp
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp/include/yaml-cpp
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
       FILES_MATCHING
       PATTERN *.h
@@ -56,15 +56,15 @@ endif()
 find_package(cnpy QUIET)
 
 if(NOT cnpy_FOUND)
-    add_library(cnpy-static STATIC ../cnpy/cnpy.cpp)
+    add_library(cnpy-static STATIC ${CMAKE_CURRENT_SOURCE_DIR}/../cnpy/cnpy.cpp)
     target_include_directories(cnpy-static PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/pace>
     )
     set_target_properties(cnpy-static PROPERTIES LINKER_LANGUAGE CXX OUTPUT_NAME cnpy)
     add_library(cnpy::cnpy ALIAS cnpy-static)
 
-    install(DIRECTORY cnpy
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../cnpy
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pace
       FILES_MATCHING
       PATTERN *.h
@@ -78,10 +78,10 @@ endif()
 # -------------------------------- wigner-cpp --------------------------------
 # this is header-only library
 
-set(WIGNER_PATH ../wigner-cpp)
+set(WIGNER_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../wigner-cpp)
 set(WIGNER_INCLUDE_PATH ${WIGNER_PATH}/include)
 
-install(DIRECTORY wigner
+install(DIRECTORY ${WIGNER_INCLUDE_PATH}/wigner
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pace
   FILES_MATCHING
   PATTERN *.hpp
@@ -101,13 +101,10 @@ FetchContent_MakeAvailable(pybind11)
 
 message(STATUS "CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
 
-set(ML_PACE "../ML-PACE")
+set(ML_PACE "${CMAKE_CURRENT_SOURCE_DIR}/../ML-PACE")
 set(ACE ${ML_PACE}/ace)
 set(ACE_EVALUATOR ${ML_PACE}/ace-evaluator)
-set(HELPERS "helpers")
-
-include_directories(${ML_PACE})
-include_directories(${HELPERS})
+set(HELPERS "${CMAKE_CURRENT_SOURCE_DIR}/helpers")
 
 set(SOURCES_BASIS "${ACE_EVALUATOR}/ace_c_basis.cpp"
         "${ACE_EVALUATOR}/ace_radial.cpp"
@@ -128,27 +125,32 @@ set(SOURCES_BASIS "${ACE_EVALUATOR}/ace_c_basis.cpp"
   )
   
 pybind11_add_module(basis ${SOURCES_BASIS} )
-target_include_directories(basis PRIVATE ${WIGNER_INCLUDE_PATH})
+target_include_directories(basis PRIVATE 
+    ${WIGNER_INCLUDE_PATH}
+    ${ML_PACE}
+    ${HELPERS}
+)
 target_link_libraries(basis PRIVATE yaml-cpp::yaml-cpp cnpy::cnpy)
 target_compile_options(basis PRIVATE -Wno-deprecated-declarations)
 set(deps_targets "")
+
+set_target_properties(basis PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+)
 
 if(BUILD_YAML_CPP)
     list(APPEND deps_targets yaml-cpp-pace)
 else()
     target_compile_definitions(basis PUBLIC YAML_PACE=YAML)
-    set_target_properties(basis PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
 endif()
 
 if(BUILD_CNPY)
     list(APPEND deps_targets cnpy-static)
 else()
-    file(MAKE_DIRECTORY ${PROJECT_SOURCE_DIR}/ML-PACE/cnpy)
-    file(WRITE ${PROJECT_SOURCE_DIR}/ML-PACE/cnpy/cnpy.h "#include <cnpy.h>")
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../ML-PACE/cnpy)
+    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/../ML-PACE/cnpy/cnpy.h "#include <cnpy.h>")
 endif()
 
 
