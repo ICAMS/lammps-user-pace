@@ -40,10 +40,7 @@ if(NOT yaml-cpp_FOUND)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp build-yaml-cpp)
     
     # yaml-cpp CMakeLists.txt creates target yaml-cpp-pace
-    # Create alias yaml-cpp::yaml-cpp for compatibility with find_package(yaml-cpp)
-    if(TARGET yaml-cpp-pace AND NOT TARGET yaml-cpp::yaml-cpp)
-        add_library(yaml-cpp::yaml-cpp ALIAS yaml-cpp-pace)
-    endif()
+    set(YAML_CPP_TARGET yaml-cpp-pace)
 
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../yaml-cpp/include/yaml-cpp
       DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -53,6 +50,8 @@ if(NOT yaml-cpp_FOUND)
     set(BUILD_YAML_CPP TRUE)
 else()
     find_package(yaml-cpp REQUIRED)
+    # System-installed yaml-cpp provides yaml-cpp::yaml-cpp target
+    set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
     set(BUILD_YAML_CPP FALSE)
 endif()
 
@@ -135,7 +134,7 @@ target_include_directories(basis PRIVATE
     ${ML_PACE}
     ${HELPERS}
 )
-target_link_libraries(basis PRIVATE yaml-cpp::yaml-cpp cnpy::cnpy)
+target_link_libraries(basis PRIVATE ${YAML_CPP_TARGET} cnpy::cnpy)
 target_compile_options(basis PRIVATE -Wno-deprecated-declarations)
 set(deps_targets "")
 
