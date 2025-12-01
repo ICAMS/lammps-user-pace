@@ -208,7 +208,7 @@ def species_key_to_bonds(key):
 
 def create_multispecies_basis_config(potential_config: Dict,
                                      unif_mus_ns_to_lsLScomb_dict: Dict = None,
-                                     func_coefs_initializer="zero",
+                                     func_coefs_initializer="one",
                                      initial_basisconfig: BBasisConfiguration = None,
                                      overwrite_blocks_from_initial_bbasis=False
                                      ) -> BBasisConfiguration:
@@ -487,7 +487,7 @@ def update_bonds_ext(bonds_ext, functions_ext):
 
 def create_multispecies_basisblocks_list(potential_config: Dict,
                                          element_ndensity_dict: Dict = None,
-                                         func_coefs_initializer="zero",
+                                         func_coefs_initializer="one",
                                          unif_mus_ns_to_lsLScomb_dict=None,
                                          verbose=False) -> List[BBasisFunctionsSpecificationBlock]:
                                          
@@ -523,7 +523,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
 
 def create_species_block(elements_vec: List, block_spec_dict: Dict,
                          ndensity: int,
-                         func_coefs_initializer="zero",
+                         func_coefs_initializer="one",
                          unif_mus_ns_to_lsLScomb_dict=None) -> BBasisFunctionsSpecificationBlock:
 
     central_atom = elements_vec[0]
@@ -558,18 +558,17 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
 
         mus_ns_white_list = unif_mus_ns_to_lsLScomb_dict[unif_comb]  # only ls, LS are important
                 
+        #print(f"*** elements_vec {elements_vec} unif_comb {unif_comb}")
         for (pre_ls, pre_LS) in mus_ns_white_list:
             if lmin <= min(pre_ls) and max(pre_ls) <= lmax:
                 if "coefs_init" in block_spec_dict:
                     func_coefs_initializer = block_spec_dict["coefs_init"]
                     
-                if func_coefs_initializer == "zero":
-                    coefs = [0] * ndensity
-                elif func_coefs_initializer == "random":
-                    coefs = np.random.randn(ndensity) * 1e-4
+                if func_coefs_initializer == "one":
+                    coefs = [1] * ndensity
                 else:
                     raise ValueError(
-                        "Unknown func_coefs_initializer={}. Could be only 'zero' or 'random'".format(func_coefs_initializer))
+                        "Unknown func_coefs_initializer={}. Could be only 'one'".format(func_coefs_initializer))
                     
                 new_spec = BBasisFunctionSpecification(elements=mus_comb_ext, ns=ns_comb,
                                                        ls=pre_ls, LS=pre_LS, coeffs=coefs)
