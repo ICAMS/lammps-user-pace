@@ -409,20 +409,23 @@ void GRACEFSBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE 
 
     const DENSITY_TYPE ndensity = basis_set.embedding_specifications.ndensity;
 
-    neighbours_forces.resize(jnum, 3);
-    neighbours_forces.fill(0.0);
 
-    weights.fill(0);
     A.fill(0);
     rhos.fill(0);
     dF_drho.fill(0);
+    if (! this->compute_energy_only) {
+        neighbours_forces.resize(jnum, 3);
+        neighbours_forces.fill(0.0);
+        weights.fill(0);
+
 
 #ifdef EXTRA_C_PROJECTIONS
-    if (this->compute_projections) {
-        projections.init(total_basis_size, "projections");
-        projections.fill(0);
-    }
+        if (this->compute_projections) {
+            projections.init(total_basis_size, "projections");
+            projections.fill(0);
+        }
 #endif
+    }
 
     setup_timer.stop();
 
@@ -558,22 +561,24 @@ void GRACEFSBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE 
 
             B = A_forward_prod(t);
 
-            //fill backward A-product triangle
-            for (t = r; t >= 1; t--)
-                A_backward_prod(t - 1) = A_backward_prod(t) * A_cache(t);
+            if (! this->compute_energy_only) {
+                //fill backward A-product triangle
+                for (t = r; t >= 1; t--)
+                    A_backward_prod(t - 1) = A_backward_prod(t) * A_cache(t);
 
-            for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
-                dB = A_forward_prod(t) * A_backward_prod(t); //dB - product of all A's except t-th
-                dB_flatten(func_ms_t_ind) = dB;
-            }
+                for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
+                    dB = A_forward_prod(t) * A_backward_prod(t); //dB - product of all A's except t-th
+                    dB_flatten(func_ms_t_ind) = dB;
+                }
+
 
 #ifdef EXTRA_C_PROJECTIONS
-            if (this->compute_projections) {
-                //aggregate C-projections separately
-                projections(func_ind) += B * gen_cgs_flatten(gen_cgs_shift + ms_ind);
-            }
+                if (this->compute_projections) {
+                    //aggregate C-projections separately
+                    projections(func_ind) += B * gen_cgs_flatten(gen_cgs_shift + ms_ind);
+                }
 #endif
-
+            }
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 //real-part only multiplication
                 rhos(p) += B * gen_cgs_flatten(gen_cgs_shift + ms_ind) *
@@ -585,86 +590,88 @@ void GRACEFSBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE 
     basis_set.FS_values_and_derivatives(rhos, evdwl, dF_drho, mu_i);
     energy_calc_timer.stop();
 
-    //ALGORITHM 3: Weights and theta calculation
-    // all ranks>=1
-    weights_and_theta_timer.start();
-    func_ms_ind = 0;
-    func_ms_t_ind = 0;// index for dB
-    DOUBLE_TYPE theta;
-    for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
-        rank = ranks_flatten(func_ind);
-        ns = ns_flatten(func_ind);
-        ls = &ls_flatten(func_ind_to_ls(func_ind));
-        num_ms_combs = num_ms_combs_flatten(func_ind);
-        const auto ms_ind_shift = func_ind_to_ms_combs(func_ind);
-        const auto gen_cgs_shift = func_ind_to_gen_cgs(func_ind);
-        const auto coeff_shift = func_ind_to_coeff(func_ind);
+    if (! compute_energy_only) {
+        //ALGORITHM 3: Weights and theta calculation
+        // all ranks>=1
+        weights_and_theta_timer.start();
+        func_ms_ind = 0;
+        func_ms_t_ind = 0;// index for dB
+        DOUBLE_TYPE theta;
+        for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
+            rank = ranks_flatten(func_ind);
+            ns = ns_flatten(func_ind);
+            ls = &ls_flatten(func_ind_to_ls(func_ind));
+            num_ms_combs = num_ms_combs_flatten(func_ind);
+            const auto ms_ind_shift = func_ind_to_ms_combs(func_ind);
+            const auto gen_cgs_shift = func_ind_to_gen_cgs(func_ind);
+            const auto coeff_shift = func_ind_to_coeff(func_ind);
 
-        for (ms_ind = 0; ms_ind < num_ms_combs; ++ms_ind, ++func_ms_ind) {
-//            ms = &func.ms_combs.get_data()[ms_ind * rank]; // current ms-combination (of length = rank)
-            ms = &ms_combs_flatten(ms_ind_shift + ms_ind * rank);
+            for (ms_ind = 0; ms_ind < num_ms_combs; ++ms_ind, ++func_ms_ind) {
+                //            ms = &func.ms_combs.get_data()[ms_ind * rank]; // current ms-combination (of length = rank)
+                ms = &ms_combs_flatten(ms_ind_shift + ms_ind * rank);
 
-            theta = 0;
-            for (DENSITY_TYPE p = 0; p < ndensity; ++p)
-                theta += dF_drho(p) * gen_cgs_flatten(gen_cgs_shift + ms_ind) *
-                         coeff_flatten(coeff_shift + p);
+                theta = 0;
+                for (DENSITY_TYPE p = 0; p < ndensity; ++p)
+                    theta += dF_drho(p) * gen_cgs_flatten(gen_cgs_shift + ms_ind) *
+                             coeff_flatten(coeff_shift + p);
 
 
-            for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
-                m_t = ms[t];
-                dB = dB_flatten(func_ms_t_ind);
-                weights(ns - 1, ls[t], m_t) += theta * dB; //Theta_array(func_ms_ind);
-            }
-        }
-    }
-    weights_and_theta_timer.stop();
-
-    // ==================== FORCES ====================
-    // loop over neighbour atoms for force calculations
-    forces_calc_loop_timer.start();
-    for (jj = 0; jj < jnum_actual; ++jj) {
-        r_hat = &rhats(jj, 0);
-        inv_r_norm = inv_r_norms(jj);
-        const auto &Y_cache_jj = Y_cache(jj);
-        const auto &DY_cache_jj = DY_cache(jj);
-
-        f_ji[0] = f_ji[1] = f_ji[2] = 0;
-
-        //for rank >= 1
-        for (n = 0; n < basis_set.nradmax; n++) {
-            for (l = 0; l <= basis_set.lmax; l++) {
-                R_over_r = R_cache(jj, n, l) * inv_r_norm;
-                DR = DR_cache(jj, n, l);
-
-                // for all m
-                for (m = -l; m <= l; m++) {
-                    auto w = weights(n, l, m);
-                    if (w == 0)
-                        continue;
-                    DY = DY_cache_jj(l, m);
-                    Y_DR = Y_cache_jj(l, m) * DR;
-
-                    grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
-                    grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
-                    grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
-
-                    f_ji[0] += w * grad_phi_nlm.a[0];
-                    f_ji[1] += w * grad_phi_nlm.a[1];
-                    f_ji[2] += w * grad_phi_nlm.a[2];
+                for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
+                    m_t = ms[t];
+                    dB = dB_flatten(func_ms_t_ind);
+                    weights(ns - 1, ls[t], m_t) += theta * dB; //Theta_array(func_ms_ind);
                 }
             }
         }
-        neighbours_forces(neighbour_index_mapping(jj), 0) = basis_set.scale * f_ji[0];
-        neighbours_forces(neighbour_index_mapping(jj), 1) = basis_set.scale * f_ji[1];
-        neighbours_forces(neighbour_index_mapping(jj), 2) = basis_set.scale * f_ji[2];
+        weights_and_theta_timer.stop();
 
-    } // end for-loop over neighbour atoms for force calculations
-    forces_calc_loop_timer.stop();
+        // ==================== FORCES ====================
+        // loop over neighbour atoms for force calculations
+        forces_calc_loop_timer.start();
+        for (jj = 0; jj < jnum_actual; ++jj) {
+            r_hat = &rhats(jj, 0);
+            inv_r_norm = inv_r_norms(jj);
+            const auto &Y_cache_jj = Y_cache(jj);
+            const auto &DY_cache_jj = DY_cache(jj);
+
+            f_ji[0] = f_ji[1] = f_ji[2] = 0;
+
+            //for rank >= 1
+            for (n = 0; n < basis_set.nradmax; n++) {
+                for (l = 0; l <= basis_set.lmax; l++) {
+                    R_over_r = R_cache(jj, n, l) * inv_r_norm;
+                    DR = DR_cache(jj, n, l);
+
+                    // for all m
+                    for (m = -l; m <= l; m++) {
+                        auto w = weights(n, l, m);
+                        if (w == 0)
+                            continue;
+                        DY = DY_cache_jj(l, m);
+                        Y_DR = Y_cache_jj(l, m) * DR;
+
+                        grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
+                        grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
+                        grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+
+                        f_ji[0] += w * grad_phi_nlm.a[0];
+                        f_ji[1] += w * grad_phi_nlm.a[1];
+                        f_ji[2] += w * grad_phi_nlm.a[2];
+                    }
+                }
+            }
+            neighbours_forces(neighbour_index_mapping(jj), 0) = basis_set.scale * f_ji[0];
+            neighbours_forces(neighbour_index_mapping(jj), 1) = basis_set.scale * f_ji[1];
+            neighbours_forces(neighbour_index_mapping(jj), 2) = basis_set.scale * f_ji[2];
+
+        } // end for-loop over neighbour atoms for force calculations
+        forces_calc_loop_timer.stop();
+    }
 
     e_atom = basis_set.scale * evdwl + basis_set.shift + basis_set.E0_shift.at(mu_i);
 
 #ifdef EXTRA_C_PROJECTIONS
-    if (this->compute_projections) {
+    if (! this->compute_energy_only && this->compute_projections) {
         //check if active set is loaded
         // use dE_dc or projections as asi_vector
         if (A_active_set_inv.find(mu_i) != A_active_set_inv.end()) {

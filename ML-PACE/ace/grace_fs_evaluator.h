@@ -204,6 +204,8 @@ public:
      */
     void resize_neighbours_cache(int max_jnum);
 
+    bool compute_energy_only = false;
+
 #ifdef EXTRA_C_PROJECTIONS
     bool compute_projections = false;
     /* 1D array to store projections of basis function (all ranks), shape: [func_ind] */

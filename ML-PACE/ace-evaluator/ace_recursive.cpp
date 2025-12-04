@@ -808,6 +808,8 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
     else
         mu_i = type[i];
 
+    // const bool do_compute_forces = ! this->compute_energy_only;
+
     const SHORT_INT_TYPE total_basis_size_rank1 = basis_set->total_basis_size_rank1[mu_i];
 //    const SHORT_INT_TYPE total_basis_size = basis_set->total_basis_size[mu_i];
 
@@ -828,16 +830,20 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
 
     const DENSITY_TYPE ndensity = basis_set->map_embedding_specifications[mu_i].ndensity;
 
-    neighbours_forces.resize(jnum, 3);
-    neighbours_forces.fill(0);
-
-    //TODO: shift nullifications to place where arrays are used
-    weights.fill({0, 0});
-    weights_rank1.fill(0);
     A.fill({0, 0});
     A_rank1.fill(0);
     rhos.fill(0);
     dF_drho.fill(0);
+
+    if (! this->compute_energy_only) {
+        neighbours_forces.resize(jnum, 3);
+        neighbours_forces.fill(0);
+
+        //TODO: shift nullifications to place where arrays are used
+        weights.fill({0, 0});
+        weights_rank1.fill(0);
+    }
+
 
 //#ifdef EXTRA_C_PROJECTIONS
 //    projections.init(total_basis_size_rank1+total_basis_size,"projections");
@@ -1153,259 +1159,260 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
     */
     energy_calc_timer.stop();
 
-    forces_calc_loop_timer.start();
+    if (! this->compute_energy_only) {
+        forces_calc_loop_timer.start();
 
 
 #ifdef DEBUG_FORCES_CALCULATIONS
-    printf("dFrhos = ");
-    for (DENSITY_TYPE p = 0; p < ndensity; ++p) printf(" %f ", dF_drho(p));
-    printf("\n");
+        printf("dFrhos = ");
+        for (DENSITY_TYPE p = 0; p < ndensity; ++p) printf(" %f ", dF_drho(p));
+        printf("\n");
 #endif
 
-    //ALGORITHM 3: Weights and theta calculation
-    // rank = 1
-    for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
-        ACECTildeBasisFunction *func = &basis_rank1[f_ind];
-        for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
-            //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
-            weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->ctildes[p];
-        }
-    }
-
-    /* --------- we now continue with the recursive code --------- */
-
-    if (recursive) {
-        /* STAGE 2:  BACKWARD PASS */
-        int i1, i2;
-        ACEComplex AA1{0.0, 0};
-        ACEComplex AA2{0.0, 0};
-        ACEComplex wcur{0.0, 0};
-        int num2_int = dag.get_num2_int();
-        int num2_leaf = dag.get_num2_leaf();
-        /* to prepare for the backward we first need to zero the weights */
-        dag.w.fill({0.0, 0});
-
-        int *dag_nodes = dag.nodes.get_data();
-        int idx_nodes = 2 * (num2_int + num2_leaf) - 1;
-
-        DOUBLE_TYPE *dag_coefs = dag.coeffs.get_data();
-        int idx_coefs = ndensity * (num2_int + num2_leaf) - 1;
-
-        for (int idx = num1 + num2_int + num2_leaf - 1; idx >= num1; idx--) {
-            i2 = dag_nodes[idx_nodes];
-            idx_nodes--;
-            i1 = dag_nodes[idx_nodes];
-            idx_nodes--;
-            AA1 = dag.AAbuf(i1);
-            AA2 = dag.AAbuf(i2);
-            wcur = dag.w(idx);   // [***]
-            for (int p = ndensity - 1; p >= 0; p--, idx_coefs--)
-                wcur += dF_drho(p) * dag_coefs[idx_coefs];
-            dag.w(i1) += wcur * AA2;   // TODO: replace with explicit muladd?
-            dag.w(i2) += wcur * AA1;
-        }
-
-        /*  [***]
-         * Note that these weights don't really need to be stored for the
-         * leaf nodes. We tested splitting this for loop into two where
-         * for the leaf nodes the weight would just be initialized to 0.0
-         * instead of reading from an array. The improvement was barely
-         * measurable, ca 3%, so we reverted to this simpler algorithm
-         */
-
-
-    } else {
-
-        // non-recursive ACE.jl style implemenation of gradients, but with
-        // a backward differentiation approach to the prod-A
-        // (cf. Algorithm 3 in the manuscript)
-
-        dag.w.fill({0.0, 0.0});
-        ACEComplex AAf{1.0, 0.0}, AAb{1.0, 0.0}, theta{0.0, 0.0};
-
-        int *AAspec = jl_AAspec_flat[mu_i].get_data();  // TODO: get from vector[mu0]
-        DOUBLE_TYPE *coeffs = jl_coeffs[mu_i].get_data(); // TODO: get from vector[mu0]
-        int idx_spec = 0;
-        int idx_coefs = 0;
-        int order = 0;
-//        int max_order = jl_AAspec[mu_i].get_dim(1);  // TODO: get from vector[mu0]
-        for (int iAA = 0; iAA < jl_AAspec[mu_i].get_dim(0); iAA++) {  // TODO: get from vector[mu0]
-            order = jl_orders[mu_i](iAA); // TODO: get from vector[mu0]
-            theta = 0.0;
-            for (int p = 0; p < ndensity; p++, idx_coefs++)
-                theta += dF_drho(p) * coeffs[idx_coefs];
-            dA(0) = 1.0;
-            AAf = 1.0;
-            for (int t = 0; t < order - 1; t++, idx_spec++) {
-                spec(t) = AAspec[idx_spec];
-                A_cache(t) = dag.AAbuf(spec(t));
-                AAf *= A_cache(t);
-                dA(t + 1) = AAf;
+        //ALGORITHM 3: Weights and theta calculation
+        // rank = 1
+        for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
+            ACECTildeBasisFunction *func = &basis_rank1[f_ind];
+            for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
+                //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
+                weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->ctildes[p];
             }
-            spec(order - 1) = AAspec[idx_spec];
-            idx_spec++;
-            A_cache(order - 1) = dag.AAbuf(spec(order - 1));
-            AAb = 1.0;
-            for (int t = order - 1; t >= 1; t--) {
-                AAb *= A_cache(t);
-                dA(t - 1) *= AAb;
-                dag.w(spec(t)) += theta * dA(t);
-            }
-            dag.w(spec(0)) += theta * dA(0);
         }
 
-    }
+        /* --------- we now continue with the recursive code --------- */
 
-    /* STAGE 3: 
-     * get the gradients from the 1-particle basis gradients and write them 
-     * into the dF/drho derivatives.
-     */
-    /* In order to reuse the original PACE code, we copy the weights back 
-     * into the the PACE datastructure. */
+        if (recursive) {
+            /* STAGE 2:  BACKWARD PASS */
+            int i1, i2;
+            ACEComplex AA1{0.0, 0};
+            ACEComplex AA2{0.0, 0};
+            ACEComplex wcur{0.0, 0};
+            int num2_int = dag.get_num2_int();
+            int num2_leaf = dag.get_num2_leaf();
+            /* to prepare for the backward we first need to zero the weights */
+            dag.w.fill({0.0, 0});
 
-    for (int idx = 0; idx < num1; idx++) {
-        int m = dag.Aspec(idx, 3);
-        if (m >= 0) {
-            weights(dag.Aspec(idx, 0),      // mu
-                    dag.Aspec(idx, 1) - 1,  // n
-                    dag.Aspec(idx, 2),      // l
-                    m) += dag.w(idx);
+            int *dag_nodes = dag.nodes.get_data();
+            int idx_nodes = 2 * (num2_int + num2_leaf) - 1;
+
+            DOUBLE_TYPE *dag_coefs = dag.coeffs.get_data();
+            int idx_coefs = ndensity * (num2_int + num2_leaf) - 1;
+
+            for (int idx = num1 + num2_int + num2_leaf - 1; idx >= num1; idx--) {
+                i2 = dag_nodes[idx_nodes];
+                idx_nodes--;
+                i1 = dag_nodes[idx_nodes];
+                idx_nodes--;
+                AA1 = dag.AAbuf(i1);
+                AA2 = dag.AAbuf(i2);
+                wcur = dag.w(idx);   // [***]
+                for (int p = ndensity - 1; p >= 0; p--, idx_coefs--)
+                    wcur += dF_drho(p) * dag_coefs[idx_coefs];
+                dag.w(i1) += wcur * AA2;   // TODO: replace with explicit muladd?
+                dag.w(i2) += wcur * AA1;
+            }
+
+            /*  [***]
+             * Note that these weights don't really need to be stored for the
+             * leaf nodes. We tested splitting this for loop into two where
+             * for the leaf nodes the weight would just be initialized to 0.0
+             * instead of reading from an array. The improvement was barely
+             * measurable, ca 3%, so we reverted to this simpler algorithm
+             */
+
+
         } else {
-            int factor = (m % 2 == 0 ? 1 : -1);
-            weights(dag.Aspec(idx, 0),      // mu
-                    dag.Aspec(idx, 1) - 1,  // n
-                    dag.Aspec(idx, 2),      // l
-                    -m) += factor * dag.w(idx).conjugated();
+
+            // non-recursive ACE.jl style implemenation of gradients, but with
+            // a backward differentiation approach to the prod-A
+            // (cf. Algorithm 3 in the manuscript)
+
+            dag.w.fill({0.0, 0.0});
+            ACEComplex AAf{1.0, 0.0}, AAb{1.0, 0.0}, theta{0.0, 0.0};
+
+            int *AAspec = jl_AAspec_flat[mu_i].get_data();  // TODO: get from vector[mu0]
+            DOUBLE_TYPE *coeffs = jl_coeffs[mu_i].get_data(); // TODO: get from vector[mu0]
+            int idx_spec = 0;
+            int idx_coefs = 0;
+            int order = 0;
+            //        int max_order = jl_AAspec[mu_i].get_dim(1);  // TODO: get from vector[mu0]
+            for (int iAA = 0; iAA < jl_AAspec[mu_i].get_dim(0); iAA++) {  // TODO: get from vector[mu0]
+                order = jl_orders[mu_i](iAA); // TODO: get from vector[mu0]
+                theta = 0.0;
+                for (int p = 0; p < ndensity; p++, idx_coefs++)
+                    theta += dF_drho(p) * coeffs[idx_coefs];
+                dA(0) = 1.0;
+                AAf = 1.0;
+                for (int t = 0; t < order - 1; t++, idx_spec++) {
+                    spec(t) = AAspec[idx_spec];
+                    A_cache(t) = dag.AAbuf(spec(t));
+                    AAf *= A_cache(t);
+                    dA(t + 1) = AAf;
+                }
+                spec(order - 1) = AAspec[idx_spec];
+                idx_spec++;
+                A_cache(order - 1) = dag.AAbuf(spec(order - 1));
+                AAb = 1.0;
+                for (int t = order - 1; t >= 1; t--) {
+                    AAb *= A_cache(t);
+                    dA(t - 1) *= AAb;
+                    dag.w(spec(t)) += theta * dA(t);
+                }
+                dag.w(spec(0)) += theta * dA(0);
+            }
+
         }
-    }
+
+        /* STAGE 3:
+         * get the gradients from the 1-particle basis gradients and write them
+         * into the dF/drho derivatives.
+         */
+        /* In order to reuse the original PACE code, we copy the weights back
+         * into the the PACE datastructure. */
+
+        for (int idx = 0; idx < num1; idx++) {
+            int m = dag.Aspec(idx, 3);
+            if (m >= 0) {
+                weights(dag.Aspec(idx, 0),      // mu
+                        dag.Aspec(idx, 1) - 1,  // n
+                        dag.Aspec(idx, 2),      // l
+                        m) += dag.w(idx);
+            } else {
+                int factor = (m % 2 == 0 ? 1 : -1);
+                weights(dag.Aspec(idx, 0),      // mu
+                        dag.Aspec(idx, 1) - 1,  // n
+                        dag.Aspec(idx, 2),      // l
+                        -m) += factor * dag.w(idx).conjugated();
+            }
+        }
 
 
-    /* ------ From here we are now back to the original PACE code ---- */
+        /* ------ From here we are now back to the original PACE code ---- */
 
-// ==================== FORCES ====================
+        // ==================== FORCES ====================
 #ifdef PRINT_MAIN_STEPS
-    printf("\nFORCE CALCULATION\n");
-    printf("loop over neighbours\n");
+        printf("\nFORCE CALCULATION\n");
+        printf("loop over neighbours\n");
 #endif
 
-// loop over neighbour atoms for force calculations
-    for (jj = 0; jj < jnum_actual; ++jj) {
-        mu_j = elements(jj);
-        r_hat = &rhats(jj, 0);
-        inv_r_norm = inv_r_norms(jj);
+        // loop over neighbour atoms for force calculations
+        for (jj = 0; jj < jnum_actual; ++jj) {
+            mu_j = elements(jj);
+            r_hat = &rhats(jj, 0);
+            inv_r_norm = inv_r_norms(jj);
 
-        Array2DLM<ACEComplex> &Y_cache_jj = Y_cache(jj);
-        Array2DLM<ACEDYcomponent> &DY_cache_jj = DY_cache(jj);
+            Array2DLM<ACEComplex> &Y_cache_jj = Y_cache(jj);
+            Array2DLM<ACEDYcomponent> &DY_cache_jj = DY_cache(jj);
 
 #ifdef PRINT_LOOPS_INDICES
-        printf("\nneighbour atom #%d\n", jj);
-        printf("rhat = (%f, %f, %f)\n", r_hat[0], r_hat[1], r_hat[2]);
+            printf("\nneighbour atom #%d\n", jj);
+            printf("rhat = (%f, %f, %f)\n", r_hat[0], r_hat[1], r_hat[2]);
 #endif
 
-        forces_calc_neighbour_timer.start();
+            forces_calc_neighbour_timer.start();
 
-        f_ji[0] = f_ji[1] = f_ji[2] = 0;
+            f_ji[0] = f_ji[1] = f_ji[2] = 0;
 
-//for rank = 1
-        for (n = 0; n < nradbasei; ++n) {
-            if (weights_rank1(mu_j, n) == 0)
-                continue;
-            auto &DG = DG_cache(jj, n);
-            DGR = DG * Y00;
-            DGR *= weights_rank1(mu_j, n);
+            //for rank = 1
+            for (n = 0; n < nradbasei; ++n) {
+                if (weights_rank1(mu_j, n) == 0)
+                    continue;
+                auto &DG = DG_cache(jj, n);
+                DGR = DG * Y00;
+                DGR *= weights_rank1(mu_j, n);
 #ifdef DEBUG_FORCES_CALCULATIONS
-            printf("r=1: (n,l,m)=(%d, 0, 0)\n", n + 1);
-            printf("\tGR(n=%d, r=%f)=%f\n", n + 1, r_norm, gr(n));
-            printf("\tDGR(n=%d, r=%f)=%f\n", n + 1, r_norm, dgr(n));
-            printf("\tdF+=(%f, %f, %f)\n", DGR * r_hat[0], DGR * r_hat[1], DGR * r_hat[2]);
+                printf("r=1: (n,l,m)=(%d, 0, 0)\n", n + 1);
+                printf("\tGR(n=%d, r=%f)=%f\n", n + 1, r_norm, gr(n));
+                printf("\tDGR(n=%d, r=%f)=%f\n", n + 1, r_norm, dgr(n));
+                printf("\tdF+=(%f, %f, %f)\n", DGR * r_hat[0], DGR * r_hat[1], DGR * r_hat[2]);
 #endif
-            f_ji[0] += DGR * r_hat[0];
-            f_ji[1] += DGR * r_hat[1];
-            f_ji[2] += DGR * r_hat[2];
-        }
+                f_ji[0] += DGR * r_hat[0];
+                f_ji[1] += DGR * r_hat[1];
+                f_ji[2] += DGR * r_hat[2];
+            }
 
-//for rank > 1
-        for (n = 0; n < nradiali; n++) {
-            for (l = 0; l <= lmaxi; l++) {
-                R_over_r = R_cache(jj, n, l) * inv_r_norm;
-                DR = DR_cache(jj, n, l);
+            //for rank > 1
+            for (n = 0; n < nradiali; n++) {
+                for (l = 0; l <= lmaxi; l++) {
+                    R_over_r = R_cache(jj, n, l) * inv_r_norm;
+                    DR = DR_cache(jj, n, l);
 
-                // for m>=0
-                for (m = 0; m <= l; m++) {
-                    ACEComplex w = weights(mu_j, n, l, m);
-                    if (w == 0)
-                        continue;
-                    //counting for -m cases if m>0
-                    // if (m > 0) w *= 2;  // not needed for recursive eval
+                    // for m>=0
+                    for (m = 0; m <= l; m++) {
+                        ACEComplex w = weights(mu_j, n, l, m);
+                        if (w == 0)
+                            continue;
+                        //counting for -m cases if m>0
+                        // if (m > 0) w *= 2;  // not needed for recursive eval
 
-                    DY = DY_cache_jj(l, m);
-                    Y_DR = Y_cache_jj(l, m) * DR;
+                        DY = DY_cache_jj(l, m);
+                        Y_DR = Y_cache_jj(l, m) * DR;
 
-                    grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
-                    grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
-                    grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+                        grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
+                        grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
+                        grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
 #ifdef DEBUG_FORCES_CALCULATIONS
-                    printf("d_phi(n=%d, l=%d, m=%d) = ((%f,%f), (%f,%f), (%f,%f))\n", n + 1, l, m,
-                           grad_phi_nlm.a[0].real, grad_phi_nlm.a[0].img,
-                           grad_phi_nlm.a[1].real, grad_phi_nlm.a[1].img,
-                           grad_phi_nlm.a[2].real, grad_phi_nlm.a[2].img);
+                        printf("d_phi(n=%d, l=%d, m=%d) = ((%f,%f), (%f,%f), (%f,%f))\n", n + 1, l, m,
+                               grad_phi_nlm.a[0].real, grad_phi_nlm.a[0].img,
+                               grad_phi_nlm.a[1].real, grad_phi_nlm.a[1].img,
+                               grad_phi_nlm.a[2].real, grad_phi_nlm.a[2].img);
 
-                    printf("weights(n,l,m)(%d,%d,%d) = (%f,%f)\n", n + 1, l, m, w.real, w.img);
-                    //if (m>0) w*=2;
-                    printf("dF(n,l,m)(%d, %d, %d) += (%f, %f, %f)\n", n + 1, l, m,
-                           w.real_part_product(grad_phi_nlm.a[0]),
-                           w.real_part_product(grad_phi_nlm.a[1]),
-                           w.real_part_product(grad_phi_nlm.a[2])
-                    );
+                        printf("weights(n,l,m)(%d,%d,%d) = (%f,%f)\n", n + 1, l, m, w.real, w.img);
+                        //if (m>0) w*=2;
+                        printf("dF(n,l,m)(%d, %d, %d) += (%f, %f, %f)\n", n + 1, l, m,
+                               w.real_part_product(grad_phi_nlm.a[0]),
+                               w.real_part_product(grad_phi_nlm.a[1]),
+                               w.real_part_product(grad_phi_nlm.a[2])
+                        );
 #endif
-// real-part multiplication only
-                    f_ji[0] += w.real_part_product(grad_phi_nlm.a[0]);
-                    f_ji[1] += w.real_part_product(grad_phi_nlm.a[1]);
-                    f_ji[2] += w.real_part_product(grad_phi_nlm.a[2]);
+                        // real-part multiplication only
+                        f_ji[0] += w.real_part_product(grad_phi_nlm.a[0]);
+                        f_ji[1] += w.real_part_product(grad_phi_nlm.a[1]);
+                        f_ji[2] += w.real_part_product(grad_phi_nlm.a[2]);
+                    }
                 }
             }
-        }
 
 
 #ifdef PRINT_INTERMEDIATE_VALUES
-        printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
-               f_ji[0], f_ji[1], f_ji[2]
-        );
+            printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
+                   f_ji[0], f_ji[1], f_ji[2]
+            );
 #endif
 
-        //hard-core repulsion
-        DCR = DCR_cache(jj);
+            //hard-core repulsion
+            DCR = DCR_cache(jj);
 #ifdef   DEBUG_FORCES_CALCULATIONS
-        printf("DCR = %f\n", DCR);
+            printf("DCR = %f\n", DCR);
 #endif
-        f_ji[0] += dF_drho_core * DCR * r_hat[0];
-        f_ji[1] += dF_drho_core * DCR * r_hat[1];
-        f_ji[2] += dF_drho_core * DCR * r_hat[2];
-        if (basis_set->radial_functions->inner_cutoff_type == "zbl") {
-            if(jj==jj_min_actual) {
-                // DCRU = 1.0
-                f_ji[0] += dF_dfcut * r_hat[0];
-                f_ji[1] += dF_dfcut * r_hat[1];
-                f_ji[2] += dF_dfcut * r_hat[2];
+            f_ji[0] += dF_drho_core * DCR * r_hat[0];
+            f_ji[1] += dF_drho_core * DCR * r_hat[1];
+            f_ji[2] += dF_drho_core * DCR * r_hat[2];
+            if (basis_set->radial_functions->inner_cutoff_type == "zbl") {
+                if(jj==jj_min_actual) {
+                    // DCRU = 1.0
+                    f_ji[0] += dF_dfcut * r_hat[0];
+                    f_ji[1] += dF_dfcut * r_hat[1];
+                    f_ji[2] += dF_dfcut * r_hat[2];
+                }
             }
-        }
 #ifdef PRINT_INTERMEDIATE_VALUES
-        printf("with core-repulsion\n");
-        printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
-               f_ji[0], f_ji[1], f_ji[2]
-        );
-        printf("neighbour_index_mapping[jj=%d]=%d\n",jj,neighbour_index_mapping(jj));
+            printf("with core-repulsion\n");
+            printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
+                   f_ji[0], f_ji[1], f_ji[2]
+            );
+            printf("neighbour_index_mapping[jj=%d]=%d\n",jj,neighbour_index_mapping(jj));
 #endif
 
-        neighbours_forces(neighbour_index_mapping(jj), 0) = f_ji[0];
-        neighbours_forces(neighbour_index_mapping(jj), 1) = f_ji[1];
-        neighbours_forces(neighbour_index_mapping(jj), 2) = f_ji[2];
+            neighbours_forces(neighbour_index_mapping(jj), 0) = f_ji[0];
+            neighbours_forces(neighbour_index_mapping(jj), 1) = f_ji[1];
+            neighbours_forces(neighbour_index_mapping(jj), 2) = f_ji[2];
 
-        forces_calc_neighbour_timer.stop();
-    }// end loop over neighbour atoms for forces
+            forces_calc_neighbour_timer.stop();
+        }// end loop over neighbour atoms for forces
 
-    forces_calc_loop_timer.stop();
-
+        forces_calc_loop_timer.stop();
+    }
     //now, energies and forces are ready
     //energies(i) = evdwl + rho_core;
     e_atom = evdwl_cut;

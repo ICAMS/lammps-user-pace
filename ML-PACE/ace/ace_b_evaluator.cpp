@@ -177,33 +177,36 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 
     const DENSITY_TYPE ndensity = basis_set->map_embedding_specifications[mu_i].ndensity;
 
-    neighbours_forces.resize(jnum, 3);
-    neighbours_forces.fill(0);
-
-    //TODO: shift nullifications to place where arrays are used
-    weights.fill({0});
-    weights_rank1.fill(0);
     A.fill({0});
     A_rank1.fill(0);
     rhos.fill(0);
     dF_drho.fill(0);
 
+    if (! this->compute_energy_only) {
+        neighbours_forces.resize(jnum, 3);
+        neighbours_forces.fill(0);
+
+        //TODO: shift nullifications to place where arrays are used
+        weights.fill({0});
+        weights_rank1.fill(0);
+
 #ifdef EXTRA_C_PROJECTIONS
-    if (this->compute_projections) {
-        projections.init(total_basis_size_rank1 + total_basis_size, "projections");
-        projections.fill(0);
-        dE_dc.init((total_basis_size_rank1 + total_basis_size) * this->basis_set->ndensitymax, "dE_dc");
-        dE_dc.fill(0);
-    }
+        if (this->compute_projections) {
+            projections.init(total_basis_size_rank1 + total_basis_size, "projections");
+            projections.fill(0);
+            dE_dc.init((total_basis_size_rank1 + total_basis_size) * this->basis_set->ndensitymax, "dE_dc");
+            dE_dc.fill(0);
+        }
 #endif
 #ifdef COMPUTE_B_GRAD
-    if (this->compute_b_grad) {
-        weights_dB.fill({0});
-        weights_rank1_dB.fill(0);
-        neighbours_dB.resize(total_basis_size_rank1 + total_basis_size, jnum, 3);
-        neighbours_dB.fill(0);
-    }
+        if (this->compute_b_grad) {
+            weights_dB.fill({0});
+            weights_rank1_dB.fill(0);
+            neighbours_dB.resize(total_basis_size_rank1 + total_basis_size, jnum, 3);
+            neighbours_dB.fill(0);
+        }
 #endif
+    }
 
     //proxy references to spherical harmonics and radial functions arrays
     const Array2DLM<ACEComplex> &ylm = basis_set->spherical_harmonics.ylm;
@@ -406,29 +409,34 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
             }
 
             B = A_forward_prod(t);
+            if (! this->compute_energy_only) {
 #ifdef DEBUG_FORCES_CALCULATIONS
-            printf("B = (%f, %f)\n", (B).real, (B).img);
+                printf("B = (%f, %f)\n", (B).real, (B).img);
 #endif
-            //fill backward A-product triangle
-            for (t = r; t >= 1; t--) {
-                A_backward_prod(t - 1) =
-                        A_backward_prod(t) * A_cache(t);
+                //fill backward A-product triangle
+                for (t = r; t >= 1; t--) {
+                    A_backward_prod(t - 1) =
+                            A_backward_prod(t) * A_cache(t);
+                }
+
+                for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
+                    dB = A_forward_prod(t) * A_backward_prod(t); //dB - product of all A's except t-th
+                    dB_flatten(func_ms_t_ind) = dB;
+#ifdef DEBUG_FORCES_CALCULATIONS
+                    m_t = ms[t];
+                    printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
+#endif
+                }
+
+
+#ifdef EXTRA_C_PROJECTIONS
+                if (this->compute_projections) {
+                    //aggregate C-projections separately
+                    projections(total_basis_size_rank1 + func_ind) += B.real_part_product(func->gen_cgs[ms_ind]);
+                }
+#endif
             }
 
-            for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
-                dB = A_forward_prod(t) * A_backward_prod(t); //dB - product of all A's except t-th
-                dB_flatten(func_ms_t_ind) = dB;
-#ifdef DEBUG_FORCES_CALCULATIONS
-                m_t = ms[t];
-                printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
-#endif
-            }
-#ifdef EXTRA_C_PROJECTIONS
-            if (this->compute_projections) {
-                //aggregate C-projections separately
-                projections(total_basis_size_rank1 + func_ind) += B.real_part_product(func->gen_cgs[ms_ind]);
-            }
-#endif
             for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
                 //real-part only multiplication
                 rhos(p) += B.real_part_product(func->gen_cgs[ms_ind] * func->coeff[p]);
@@ -455,7 +463,7 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
 
 #ifdef EXTRA_C_PROJECTIONS
     //compute dE_dc only optionally
-    if (this->compute_projections && !is_linear_extrapolation_grade) {
+    if (! this->compute_energy_only && this->compute_projections && !is_linear_extrapolation_grade) {
         int projections_size = projections.get_size();
         int dE_dc_ind = 0;
         for (DENSITY_TYPE p = 0; p < ndensity; p++) {
@@ -491,263 +499,265 @@ ACEBEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *type, co
     for (DENSITY_TYPE p = 0; p < ndensity; ++p)
         dF_drho(p) *= fcut;
 
-#ifdef DEBUG_FORCES_CALCULATIONS
-    printf("dFrhos = ");
-    for(DENSITY_TYPE p =0; p<ndensity; ++p) printf(" %f ",dF_drho(p));
-    printf("\n");
-#endif
-
-    //ALGORITHM 3: Weights and theta calculation
-    // rank = 1
-    for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
-        auto func = &basis_rank1[f_ind];
-        for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
-            //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
-            weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->coeff[p];
-        }
-#ifdef COMPUTE_B_GRAD
-        if (this->compute_b_grad) {
-            //actually, it is always += 1, due to CG for r=1
-            weights_rank1_dB(f_ind, func->mus[0], func->ns[0] - 1) += 1;
-        }
-#endif
-    }
-
-    // rank>1
-    func_ms_ind = 0;
-    func_ms_t_ind = 0;// index for dB
-    DOUBLE_TYPE theta = 0, theta_dB = 0;
-    for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
-        auto func = &basis[func_ind];
-//        ndensity = func->ndensity;
-        rank = func->rank;
-        mus = func->mus;
-        ns = func->ns;
-        ls = func->ls;
-        for (ms_ind = 0; ms_ind < func->num_ms_combs; ++ms_ind, ++func_ms_ind) {
-            ms = &func->ms_combs[ms_ind * rank];
-            theta = 0;
-            theta_dB = func->gen_cgs[ms_ind];
-            for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
-                theta += dF_drho(p) * func->gen_cgs[ms_ind] * func->coeff[p];
-#ifdef DEBUG_FORCES_CALCULATIONS
-                printf("(p=%d) theta += dF_drho[p] * func.ctildes[ms_ind * ndensity + p] = %f * %f = %f\n",p, dF_drho(p), func->gen_cgs[ms_ind] * func->coeff[p],dF_drho(p)*func->gen_cgs[ms_ind] * func->coeff[p]);
-                printf("theta=%f\n",theta);
-#endif
-            }
-
-            theta *= 0.5; // 0.5 factor due to possible double counting ???
-            theta_dB *= 0.5;
-            for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
-                m_t = ms[t];
-                factor = (m_t % 2 == 0 ? 1 : -1);
-                dB = dB_flatten(func_ms_t_ind);
-                weights(mus[t], ns[t] - 1, ls[t], m_t) += theta * dB; //Theta_array(func_ms_ind);
-                // update -m_t (that could also be positive), because the basis is half_basis
-                weights(mus[t], ns[t] - 1, ls[t], -m_t) +=
-                        theta * (dB).conjugated() * factor;// Theta_array(func_ms_ind);
-#ifdef DEBUG_FORCES_CALCULATIONS
-                printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
-                printf("theta = %f\n",theta);
-                printf("weights(n,l,m)(%d,%d,%d) += (%f, %f)\n", ns[t], ls[t], m_t, (theta * dB * 0.5).real,
-                       (theta * dB * 0.5).img);
-                printf("weights(n,l,-m)(%d,%d,%d) += (%f, %f)\n", ns[t], ls[t], -m_t,
-                       ( theta * (dB).conjugated() * factor * 0.5).real,
-                       ( theta * (dB).conjugated() * factor * 0.5).img);
-#endif
-#ifdef COMPUTE_B_GRAD
-                if (this->compute_b_grad) {
-                    weights_dB(func_ind, mus[t], ns[t] - 1, ls[t], m_t) += theta_dB * dB;
-                    weights_dB(func_ind, mus[t], ns[t] - 1, ls[t], -m_t) += theta_dB * (dB).conjugated() * factor;
-                }
-#endif
-            }
-        }
-    }
     energy_calc_timer.stop();
 
-// ==================== FORCES ====================
-#ifdef PRINT_MAIN_STEPS
-    printf("\nFORCE CALCULATION\n");
-    printf("loop over neighbours\n");
-#endif
-
-    forces_calc_loop_timer.start();
-// loop over neighbour atoms for force calculations
-    for (jj = 0; jj < jnum_actual; ++jj) {
-        mu_j = elements(jj);
-        r_hat = &rhats(jj, 0);
-        inv_r_norm = inv_r_norms(jj);
-
-        Array2DLM<ACEComplex> &Y_cache_jj = Y_cache(jj);
-        Array2DLM<ACEDYcomponent> &DY_cache_jj = DY_cache(jj);
-
-#ifdef PRINT_LOOPS_INDICES
-        printf("\nneighbour atom #%d\n", jj);
-        printf("rhat = (%f, %f, %f)\n", r_hat[0], r_hat[1], r_hat[2]);
-#endif
-
-        forces_calc_neighbour_timer.start();
-
-        f_ji[0] = f_ji[1] = f_ji[2] = 0;
-
-//for rank = 1
-        for (n = 0; n < nradbasei; ++n) {
-            if (weights_rank1(mu_j, n) == 0)
-                continue;
-            auto &DG = DG_cache(jj, n);
-            DGR = DG * Y00;
-            DGR *= weights_rank1(mu_j, n);
+    if (! this->compute_energy_only) {
 #ifdef DEBUG_FORCES_CALCULATIONS
-            printf("r=1: (n,l,m)=(%d, 0, 0)\n",n+1);
-            printf("\tGR(n=%d, r=%f)=%f\n",n+1,r_norm, gr(n));
-            printf("\tDGR(n=%d, r=%f)=%f\n",n+1,r_norm, dgr(n));
-            printf("\tdF+=(%f, %f, %f)\n",DGR * r_hat[0], DGR * r_hat[1], DGR * r_hat[2]);
+        printf("dFrhos = ");
+        for(DENSITY_TYPE p =0; p<ndensity; ++p) printf(" %f ",dF_drho(p));
+        printf("\n");
 #endif
-            f_ji[0] += DGR * r_hat[0];
-            f_ji[1] += DGR * r_hat[1];
-            f_ji[2] += DGR * r_hat[2];
-        }
-#ifdef COMPUTE_B_GRAD
-        if (this->compute_b_grad) {
-            for (func_ind = 0; func_ind < total_basis_size_rank1; func_ind++) {
 
-                n = basis_rank1[func_ind].ns[0] - 1;
-                auto &DG = DG_cache(jj, n);
-
-                DGR = DG * Y00;
-                DGR *= weights_rank1_dB(func_ind, mu_j, n); // actually always = 0,1
-                neighbours_dB(func_ind, neighbour_index_mapping(jj), 0) += DGR * r_hat[0];
-                neighbours_dB(func_ind, neighbour_index_mapping(jj), 1) += DGR * r_hat[1];
-                neighbours_dB(func_ind, neighbour_index_mapping(jj), 2) += DGR * r_hat[2];
-
+        //ALGORITHM 3: Weights and theta calculation
+        // rank = 1
+        for (int f_ind = 0; f_ind < total_basis_size_rank1; ++f_ind) {
+            auto func = &basis_rank1[f_ind];
+            for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
+                //for rank=1 (r=0) only 1 ms-combination exists (ms_ind=0), so index of func.ctildes is 0..ndensity-1
+                weights_rank1(func->mus[0], func->ns[0] - 1) += dF_drho(p) * func->coeff[p];
             }
+#ifdef COMPUTE_B_GRAD
+            if (this->compute_b_grad) {
+                //actually, it is always += 1, due to CG for r=1
+                weights_rank1_dB(f_ind, func->mus[0], func->ns[0] - 1) += 1;
+            }
+#endif
         }
-#endif
-//for rank > 1
-        for (n = 0; n < nradiali; n++) {
-            for (l = 0; l <= lmaxi; l++) {
-                R_over_r = R_cache(jj, n, l) * inv_r_norm;
-                DR = DR_cache(jj, n, l);
 
-                // for m>=0
-                for (m = 0; m <= l; m++) {
-                    ACEComplex w = weights(mu_j, n, l, m);
-                    if (w == 0)
-                        continue;
-                    //counting for -m cases if m>0
-                    if (m > 0) w *= 2;
-                    DY = DY_cache_jj(l, m);
-                    Y_DR = Y_cache_jj(l, m) * DR;
-
-                    grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
-                    grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
-                    grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+        // rank>1
+        func_ms_ind = 0;
+        func_ms_t_ind = 0;// index for dB
+        DOUBLE_TYPE theta = 0, theta_dB = 0;
+        for (func_ind = 0; func_ind < total_basis_size; ++func_ind) {
+            auto func = &basis[func_ind];
+            //        ndensity = func->ndensity;
+            rank = func->rank;
+            mus = func->mus;
+            ns = func->ns;
+            ls = func->ls;
+            for (ms_ind = 0; ms_ind < func->num_ms_combs; ++ms_ind, ++func_ms_ind) {
+                ms = &func->ms_combs[ms_ind * rank];
+                theta = 0;
+                theta_dB = func->gen_cgs[ms_ind];
+                for (DENSITY_TYPE p = 0; p < ndensity; ++p) {
+                    theta += dF_drho(p) * func->gen_cgs[ms_ind] * func->coeff[p];
 #ifdef DEBUG_FORCES_CALCULATIONS
-                    printf("d_phi(n=%d, l=%d, m=%d) = ((%f,%f), (%f,%f), (%f,%f))\n",n+1,l,m,
-                           grad_phi_nlm.a[0].real, grad_phi_nlm.a[0].img,
-                           grad_phi_nlm.a[1].real, grad_phi_nlm.a[1].img,
-                           grad_phi_nlm.a[2].real, grad_phi_nlm.a[2].img);
-
-                    printf("weights(n,l,m)(%d,%d,%d) = (%f,%f)\n", n+1, l, m,w.real, w.img);
-                    //if (m>0) w*=2;
-                    printf("dF(n,l,m)(%d, %d, %d) += (%f, %f, %f)\n", n + 1, l, m,
-                           w.real_part_product(grad_phi_nlm.a[0]),
-                           w.real_part_product(grad_phi_nlm.a[1]),
-                           w.real_part_product(grad_phi_nlm.a[2])
-                    );
+                    printf("(p=%d) theta += dF_drho[p] * func.ctildes[ms_ind * ndensity + p] = %f * %f = %f\n",p, dF_drho(p), func->gen_cgs[ms_ind] * func->coeff[p],dF_drho(p)*func->gen_cgs[ms_ind] * func->coeff[p]);
+                    printf("theta=%f\n",theta);
 #endif
-// real-part multiplication only
-                    f_ji[0] += w.real_part_product(grad_phi_nlm.a[0]);
-                    f_ji[1] += w.real_part_product(grad_phi_nlm.a[1]);
-                    f_ji[2] += w.real_part_product(grad_phi_nlm.a[2]);
+                }
+
+                theta *= 0.5; // 0.5 factor due to possible double counting ???
+                theta_dB *= 0.5;
+                for (t = 0; t < rank; ++t, ++func_ms_t_ind) {
+                    m_t = ms[t];
+                    factor = (m_t % 2 == 0 ? 1 : -1);
+                    dB = dB_flatten(func_ms_t_ind);
+                    weights(mus[t], ns[t] - 1, ls[t], m_t) += theta * dB; //Theta_array(func_ms_ind);
+                    // update -m_t (that could also be positive), because the basis is half_basis
+                    weights(mus[t], ns[t] - 1, ls[t], -m_t) +=
+                            theta * (dB).conjugated() * factor;// Theta_array(func_ms_ind);
+#ifdef DEBUG_FORCES_CALCULATIONS
+                    printf("dB(n,l,m)(%d,%d,%d) = (%f, %f)\n", ns[t], ls[t], m_t, (dB).real, (dB).img);
+                    printf("theta = %f\n",theta);
+                    printf("weights(n,l,m)(%d,%d,%d) += (%f, %f)\n", ns[t], ls[t], m_t, (theta * dB * 0.5).real,
+                           (theta * dB * 0.5).img);
+                    printf("weights(n,l,-m)(%d,%d,%d) += (%f, %f)\n", ns[t], ls[t], -m_t,
+                           ( theta * (dB).conjugated() * factor * 0.5).real,
+                           ( theta * (dB).conjugated() * factor * 0.5).img);
+#endif
+#ifdef COMPUTE_B_GRAD
+                    if (this->compute_b_grad) {
+                        weights_dB(func_ind, mus[t], ns[t] - 1, ls[t], m_t) += theta_dB * dB;
+                        weights_dB(func_ind, mus[t], ns[t] - 1, ls[t], -m_t) += theta_dB * (dB).conjugated() * factor;
+                    }
+#endif
                 }
             }
         }
 
+        // ==================== FORCES ====================
+#ifdef PRINT_MAIN_STEPS
+        printf("\nFORCE CALCULATION\n");
+        printf("loop over neighbours\n");
+#endif
+
+        forces_calc_loop_timer.start();
+        // loop over neighbour atoms for force calculations
+        for (jj = 0; jj < jnum_actual; ++jj) {
+            mu_j = elements(jj);
+            r_hat = &rhats(jj, 0);
+            inv_r_norm = inv_r_norms(jj);
+
+            Array2DLM<ACEComplex> &Y_cache_jj = Y_cache(jj);
+            Array2DLM<ACEDYcomponent> &DY_cache_jj = DY_cache(jj);
+
+#ifdef PRINT_LOOPS_INDICES
+            printf("\nneighbour atom #%d\n", jj);
+            printf("rhat = (%f, %f, %f)\n", r_hat[0], r_hat[1], r_hat[2]);
+#endif
+
+            forces_calc_neighbour_timer.start();
+
+            f_ji[0] = f_ji[1] = f_ji[2] = 0;
+
+            //for rank = 1
+            for (n = 0; n < nradbasei; ++n) {
+                if (weights_rank1(mu_j, n) == 0)
+                    continue;
+                auto &DG = DG_cache(jj, n);
+                DGR = DG * Y00;
+                DGR *= weights_rank1(mu_j, n);
+#ifdef DEBUG_FORCES_CALCULATIONS
+                printf("r=1: (n,l,m)=(%d, 0, 0)\n",n+1);
+                printf("\tGR(n=%d, r=%f)=%f\n",n+1,r_norm, gr(n));
+                printf("\tDGR(n=%d, r=%f)=%f\n",n+1,r_norm, dgr(n));
+                printf("\tdF+=(%f, %f, %f)\n",DGR * r_hat[0], DGR * r_hat[1], DGR * r_hat[2]);
+#endif
+                f_ji[0] += DGR * r_hat[0];
+                f_ji[1] += DGR * r_hat[1];
+                f_ji[2] += DGR * r_hat[2];
+            }
 #ifdef COMPUTE_B_GRAD
-        //TODO: merge with loop above
-        //for rank > 1 dB A matrix contributions
-        //total basis size needs to include chemical index offset
-        if (this->compute_b_grad) {
+            if (this->compute_b_grad) {
+                for (func_ind = 0; func_ind < total_basis_size_rank1; func_ind++) {
+
+                    n = basis_rank1[func_ind].ns[0] - 1;
+                    auto &DG = DG_cache(jj, n);
+
+                    DGR = DG * Y00;
+                    DGR *= weights_rank1_dB(func_ind, mu_j, n); // actually always = 0,1
+                    neighbours_dB(func_ind, neighbour_index_mapping(jj), 0) += DGR * r_hat[0];
+                    neighbours_dB(func_ind, neighbour_index_mapping(jj), 1) += DGR * r_hat[1];
+                    neighbours_dB(func_ind, neighbour_index_mapping(jj), 2) += DGR * r_hat[2];
+
+                }
+            }
+#endif
+            //for rank > 1
             for (n = 0; n < nradiali; n++) {
                 for (l = 0; l <= lmaxi; l++) {
                     R_over_r = R_cache(jj, n, l) * inv_r_norm;
                     DR = DR_cache(jj, n, l);
+
                     // for m>=0
                     for (m = 0; m <= l; m++) {
+                        ACEComplex w = weights(mu_j, n, l, m);
+                        if (w == 0)
+                            continue;
+                        //counting for -m cases if m>0
+                        if (m > 0) w *= 2;
                         DY = DY_cache_jj(l, m);
                         Y_DR = Y_cache_jj(l, m) * DR;
 
                         grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
                         grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
                         grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+#ifdef DEBUG_FORCES_CALCULATIONS
+                        printf("d_phi(n=%d, l=%d, m=%d) = ((%f,%f), (%f,%f), (%f,%f))\n",n+1,l,m,
+                               grad_phi_nlm.a[0].real, grad_phi_nlm.a[0].img,
+                               grad_phi_nlm.a[1].real, grad_phi_nlm.a[1].img,
+                               grad_phi_nlm.a[2].real, grad_phi_nlm.a[2].img);
 
-                        for (func_ind = 0; func_ind < total_basis_size; func_ind++) {
-                            //mu_j -> func_ind -- need to handle mu_j implicitly with func_ind chemical index offsets
-                            ACEComplex w_dB = weights_dB(func_ind, mu_j, n, l, m);
-                            if (w_dB == 0)
-                                continue;
-                            //counting for -m cases if m>0
-                            if (m > 0) w_dB *= 2;
-                            neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 0) +=
-                                    w_dB.real_part_product(grad_phi_nlm.a[0]);
-                            neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 1) +=
-                                    w_dB.real_part_product(grad_phi_nlm.a[1]);
-                            neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 2) +=
-                                    w_dB.real_part_product(grad_phi_nlm.a[2]);
+                        printf("weights(n,l,m)(%d,%d,%d) = (%f,%f)\n", n+1, l, m,w.real, w.img);
+                        //if (m>0) w*=2;
+                        printf("dF(n,l,m)(%d, %d, %d) += (%f, %f, %f)\n", n + 1, l, m,
+                               w.real_part_product(grad_phi_nlm.a[0]),
+                               w.real_part_product(grad_phi_nlm.a[1]),
+                               w.real_part_product(grad_phi_nlm.a[2])
+                        );
+#endif
+                        // real-part multiplication only
+                        f_ji[0] += w.real_part_product(grad_phi_nlm.a[0]);
+                        f_ji[1] += w.real_part_product(grad_phi_nlm.a[1]);
+                        f_ji[2] += w.real_part_product(grad_phi_nlm.a[2]);
+                    }
+                }
+            }
+
+#ifdef COMPUTE_B_GRAD
+            //TODO: merge with loop above
+            //for rank > 1 dB A matrix contributions
+            //total basis size needs to include chemical index offset
+            if (this->compute_b_grad) {
+                for (n = 0; n < nradiali; n++) {
+                    for (l = 0; l <= lmaxi; l++) {
+                        R_over_r = R_cache(jj, n, l) * inv_r_norm;
+                        DR = DR_cache(jj, n, l);
+                        // for m>=0
+                        for (m = 0; m <= l; m++) {
+                            DY = DY_cache_jj(l, m);
+                            Y_DR = Y_cache_jj(l, m) * DR;
+
+                            grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
+                            grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
+                            grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
+
+                            for (func_ind = 0; func_ind < total_basis_size; func_ind++) {
+                                //mu_j -> func_ind -- need to handle mu_j implicitly with func_ind chemical index offsets
+                                ACEComplex w_dB = weights_dB(func_ind, mu_j, n, l, m);
+                                if (w_dB == 0)
+                                    continue;
+                                //counting for -m cases if m>0
+                                if (m > 0) w_dB *= 2;
+                                neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 0) +=
+                                        w_dB.real_part_product(grad_phi_nlm.a[0]);
+                                neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 1) +=
+                                        w_dB.real_part_product(grad_phi_nlm.a[1]);
+                                neighbours_dB(total_basis_size_rank1 + func_ind, neighbour_index_mapping(jj), 2) +=
+                                        w_dB.real_part_product(grad_phi_nlm.a[2]);
+                            }
                         }
                     }
                 }
             }
-        }
 #endif
 
 #ifdef PRINT_INTERMEDIATE_VALUES
-        printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
-               f_ji[0], f_ji[1], f_ji[2]
-        );
+            printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
+                   f_ji[0], f_ji[1], f_ji[2]
+            );
 #endif
 
-        //hard-core repulsion
-        DCR = DCR_cache(jj);
+            //hard-core repulsion
+            DCR = DCR_cache(jj);
 #ifdef   DEBUG_FORCES_CALCULATIONS
-        printf("DCR = %f\n",DCR);
+            printf("DCR = %f\n",DCR);
 #endif
-        f_ji[0] += dF_drho_core * DCR * r_hat[0];
-        f_ji[1] += dF_drho_core * DCR * r_hat[1];
-        f_ji[2] += dF_drho_core * DCR * r_hat[2];
-        if(is_zbl) {
-            if(jj==jj_min_actual) {
-                // DCRU = 1.0
-                f_ji[0] += dF_dfcut * r_hat[0];
-                f_ji[1] += dF_dfcut * r_hat[1];
-                f_ji[2] += dF_dfcut * r_hat[2];
+            f_ji[0] += dF_drho_core * DCR * r_hat[0];
+            f_ji[1] += dF_drho_core * DCR * r_hat[1];
+            f_ji[2] += dF_drho_core * DCR * r_hat[2];
+            if(is_zbl) {
+                if(jj==jj_min_actual) {
+                    // DCRU = 1.0
+                    f_ji[0] += dF_dfcut * r_hat[0];
+                    f_ji[1] += dF_dfcut * r_hat[1];
+                    f_ji[2] += dF_dfcut * r_hat[2];
+                }
             }
-        }
 #ifdef PRINT_INTERMEDIATE_VALUES
-        printf("with core-repulsion\n");
-        printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
-               f_ji[0], f_ji[1], f_ji[2]
-        );
-        printf("neighbour_index_mapping[jj=%d]=%d\n",jj,neighbour_index_mapping[jj]);
+            printf("with core-repulsion\n");
+            printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,
+                   f_ji[0], f_ji[1], f_ji[2]
+            );
+            printf("neighbour_index_mapping[jj=%d]=%d\n",jj,neighbour_index_mapping[jj]);
 #endif
 
-        neighbours_forces(neighbour_index_mapping(jj), 0) = f_ji[0];
-        neighbours_forces(neighbour_index_mapping(jj), 1) = f_ji[1];
-        neighbours_forces(neighbour_index_mapping(jj), 2) = f_ji[2];
+            neighbours_forces(neighbour_index_mapping(jj), 0) = f_ji[0];
+            neighbours_forces(neighbour_index_mapping(jj), 1) = f_ji[1];
+            neighbours_forces(neighbour_index_mapping(jj), 2) = f_ji[2];
 
-        forces_calc_neighbour_timer.stop();
-    }// end loop over neighbour atoms for forces
+            forces_calc_neighbour_timer.stop();
+        }// end loop over neighbour atoms for forces
 
-    forces_calc_loop_timer.stop();
-
+        forces_calc_loop_timer.stop();
+    }
     //now, energies and forces are ready
     //energies(i) = evdwl + rho_core;
     e_atom = evdwl_cut;
     ace_fcut = fcut;
 #ifdef EXTRA_C_PROJECTIONS
-    if (this->compute_projections) {
+    if (!this->compute_energy_only && this->compute_projections) {
         //check if active set is loaded
         // use dE_dc or projections as asi_vector
         if (A_active_set_inv.find(mu_i) != A_active_set_inv.end()) {

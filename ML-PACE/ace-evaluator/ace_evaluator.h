@@ -88,6 +88,8 @@ public:
     DOUBLE_TYPE e_atom = 0; ///< energy of current atom, including core-repulsion
     DOUBLE_TYPE ace_fcut;
 
+    bool compute_energy_only = false;
+
     /**
      * temporary array for the pair forces between current atom_i and its neighbours atom_k
      * neighbours_forces(k,3),  k = 0..num_of_neighbours(atom_i)-1
