@@ -208,7 +208,6 @@ def species_key_to_bonds(key):
 
 def create_multispecies_basis_config(potential_config: Dict,
                                      unif_mus_ns_to_lsLScomb_dict: Dict = None,
-                                     func_coefs_initializer="one",
                                      initial_basisconfig: BBasisConfiguration = None,
                                      overwrite_blocks_from_initial_bbasis=False
                                      ) -> BBasisConfiguration:
@@ -216,8 +215,11 @@ def create_multispecies_basis_config(potential_config: Dict,
     overwrite_blocks_from_initial_bbasis = potential_config.get('overwrite_blocks_from_initial_bbasis',
                                                                 overwrite_blocks_from_initial_bbasis)
                                                                 
+    #path = 'unif_mus_ns_to_lsLScomb_dict.pckl'
+    path = 'pyace_whitelist_pa_rpi.pckl'
+                                                                
     if unif_mus_ns_to_lsLScomb_dict is None:
-        with resources.files('lammps_pyace').joinpath('unif_mus_ns_to_lsLScomb_dict.pckl').open('rb') as f:
+        with resources.files('lammps_pyace').joinpath(path).open('rb') as f:
             unif_mus_ns_to_lsLScomb_dict = pickle.load(f)
             
     element_ndensity_dict = None
@@ -247,7 +249,6 @@ def create_multispecies_basis_config(potential_config: Dict,
 
     blocks_list = create_multispecies_basisblocks_list(potential_config,
                                                        element_ndensity_dict=element_ndensity_dict,
-                                                       func_coefs_initializer=func_coefs_initializer,
                                                        unif_mus_ns_to_lsLScomb_dict=unif_mus_ns_to_lsLScomb_dict,
                                                        )
     # compare with initial_basisconfig, if some blocks are missing in generated config - add them:
@@ -487,7 +488,6 @@ def update_bonds_ext(bonds_ext, functions_ext):
 
 def create_multispecies_basisblocks_list(potential_config: Dict,
                                          element_ndensity_dict: Dict = None,
-                                         func_coefs_initializer="one",
                                          unif_mus_ns_to_lsLScomb_dict=None,
                                          verbose=False) -> List[BBasisFunctionsSpecificationBlock]:
                                          
@@ -513,7 +513,7 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
             
         ndensity = element_ndensity_dict[elements_vec[0]]
         spec_block = create_species_block(elements_vec, block_spec_dict, ndensity,
-                                          func_coefs_initializer, unif_mus_ns_to_lsLScomb_dict)
+                                          unif_mus_ns_to_lsLScomb_dict)
 
         if verbose:
             print(len(spec_block.funcspecs), " functions added")
@@ -523,7 +523,6 @@ def create_multispecies_basisblocks_list(potential_config: Dict,
 
 def create_species_block(elements_vec: List, block_spec_dict: Dict,
                          ndensity: int,
-                         func_coefs_initializer="one",
                          unif_mus_ns_to_lsLScomb_dict=None) -> BBasisFunctionsSpecificationBlock:
 
     central_atom = elements_vec[0]
@@ -561,19 +560,13 @@ def create_species_block(elements_vec: List, block_spec_dict: Dict,
         #print(f"*** elements_vec {elements_vec} unif_comb {unif_comb}")
         for (pre_ls, pre_LS) in mus_ns_white_list:
             if lmin <= min(pre_ls) and max(pre_ls) <= lmax:
-                if "coefs_init" in block_spec_dict:
-                    func_coefs_initializer = block_spec_dict["coefs_init"]
-                    
-                if func_coefs_initializer == "one":
-                    coefs = [1] * ndensity
-                else:
-                    raise ValueError(
-                        "Unknown func_coefs_initializer={}. Could be only 'one'".format(func_coefs_initializer))
-                    
-                new_spec = BBasisFunctionSpecification(elements=mus_comb_ext, ns=ns_comb,
-                                                       ls=pre_ls, LS=pre_LS, coeffs=coefs)
-
-                current_block_func_spec_list.append(new_spec)
+                current_block_func_spec_list.append(BBasisFunctionSpecification(
+                    elements=mus_comb_ext,
+                    ns=ns_comb,
+                    ls=pre_ls,
+                    LS=pre_LS,
+                    coeffs=[1] * ndensity
+                ))
                         
     spec_block.funcspecs = current_block_func_spec_list
     
