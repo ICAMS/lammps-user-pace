@@ -55,7 +55,7 @@ Split a given string by tabs or space
 
 @returns splitted, string - the string after splitting
 */
-vector<string> split_key(string mainkey);
+vector<string> split_key(const string& s);
 
 
 /**
@@ -242,7 +242,7 @@ public:
 
     void initialize_basis(BBasisConfiguration &basisSetup);
 
-    void _clean_contiguous_arrays();
+    void _clean_contiguous_arrays() override;
 
 
     vector<DOUBLE_TYPE> get_all_coeffs() const override;

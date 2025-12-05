@@ -161,7 +161,7 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
@@ -416,13 +416,13 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
         if((i1>=dim[1])){ //(i1<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
+            snprintf(buf, sizeof(buf), "%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
             throw std::out_of_range(buf);
         }
     
@@ -700,19 +700,19 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
         if((i1>=dim[1])){ //(i1<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
+            snprintf(buf, sizeof(buf), "%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
             throw std::out_of_range(buf);
         }
     
         if((i2>=dim[2])){ //(i2<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
+            snprintf(buf, sizeof(buf), "%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
             throw std::out_of_range(buf);
         }
     
@@ -1004,25 +1004,25 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
         if((i1>=dim[1])){ //(i1<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
+            snprintf(buf, sizeof(buf), "%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
             throw std::out_of_range(buf);
         }
     
         if((i2>=dim[2])){ //(i2<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
+            snprintf(buf, sizeof(buf), "%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
             throw std::out_of_range(buf);
         }
     
         if((i3>=dim[3])){ //(i3<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
+            snprintf(buf, sizeof(buf), "%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
             throw std::out_of_range(buf);
         }
     
@@ -1328,31 +1328,31 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
         if((i1>=dim[1])){ //(i1<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
+            snprintf(buf, sizeof(buf), "%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
             throw std::out_of_range(buf);
         }
     
         if((i2>=dim[2])){ //(i2<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
+            snprintf(buf, sizeof(buf), "%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
             throw std::out_of_range(buf);
         }
     
         if((i3>=dim[3])){ //(i3<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
+            snprintf(buf, sizeof(buf), "%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
             throw std::out_of_range(buf);
         }
     
         if((i4>=dim[4])){ //(i4<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i4=%ld out of range (0, %ld)\n", array_name.c_str(), i4, dim[4]-1);
+            snprintf(buf, sizeof(buf), "%s: index i4=%ld out of range (0, %ld)\n", array_name.c_str(), i4, dim[4]-1);
             throw std::out_of_range(buf);
         }
     
@@ -1672,37 +1672,37 @@ public:
     
         if((i0>=dim[0])){ //(i0<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
+            snprintf(buf, sizeof(buf), "%s: index i0=%ld out of range (0, %ld)\n", array_name.c_str(), i0, dim[0]-1);
             throw std::out_of_range(buf);
         }
     
         if((i1>=dim[1])){ //(i1<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
+            snprintf(buf, sizeof(buf), "%s: index i1=%ld out of range (0, %ld)\n", array_name.c_str(), i1, dim[1]-1);
             throw std::out_of_range(buf);
         }
     
         if((i2>=dim[2])){ //(i2<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
+            snprintf(buf, sizeof(buf), "%s: index i2=%ld out of range (0, %ld)\n", array_name.c_str(), i2, dim[2]-1);
             throw std::out_of_range(buf);
         }
     
         if((i3>=dim[3])){ //(i3<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
+            snprintf(buf, sizeof(buf), "%s: index i3=%ld out of range (0, %ld)\n", array_name.c_str(), i3, dim[3]-1);
             throw std::out_of_range(buf);
         }
     
         if((i4>=dim[4])){ //(i4<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i4=%ld out of range (0, %ld)\n", array_name.c_str(), i4, dim[4]-1);
+            snprintf(buf, sizeof(buf), "%s: index i4=%ld out of range (0, %ld)\n", array_name.c_str(), i4, dim[4]-1);
             throw std::out_of_range(buf);
         }
     
         if((i5>=dim[5])){ //(i5<0)||
             char buf[1024];            
-            sprintf(buf,"%s: index i5=%ld out of range (0, %ld)\n", array_name.c_str(), i5, dim[5]-1);
+            snprintf(buf, sizeof(buf), "%s: index i5=%ld out of range (0, %ld)\n", array_name.c_str(), i5, dim[5]-1);
             throw std::out_of_range(buf);
         }
     
