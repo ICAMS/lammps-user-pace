@@ -1128,6 +1128,152 @@ void ACECTildeBasisSet::set_all_coeffs(const vector<DOUBLE_TYPE> &coeffs) {
     }
 }
 
+// added by @alphataubio, needed by FitSNAP PR278
+vector<DOUBLE_TYPE> ACECTildeBasisSet::get_basis_coeffs() const {
+    vector<DOUBLE_TYPE> coeffs;
+
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        for (int func_ind = 0; func_ind < total_basis_size_rank1[mu]; func_ind++) {
+            auto ndens = basis_rank1[mu][func_ind].ndensity;
+            for (int ms_ind = 0; ms_ind < basis_rank1[mu][func_ind].num_ms_combs; ms_ind++) {
+                for (DENSITY_TYPE p = 0; p < ndens; p++)
+                    coeffs.emplace_back(basis_rank1[mu][func_ind].ctildes[ms_ind * ndens + p]);
+            }
+        }
+
+        for (int func_ind = 0; func_ind < total_basis_size[mu]; func_ind++) {
+            auto ndens = basis[mu][func_ind].ndensity;
+            for (int ms_ind = 0; ms_ind < basis[mu][func_ind].num_ms_combs; ms_ind++) {
+                for (DENSITY_TYPE p = 0; p < ndens; p++)
+                    coeffs.emplace_back(basis[mu][func_ind].ctildes[ms_ind * ndens + p]);
+            }
+        }
+    }
+
+    return coeffs;
+}
+
+void ACECTildeBasisSet::set_basis_coeffs(const vector<DOUBLE_TYPE> &coeffs) {
+    vector<DOUBLE_TYPE> basis_coeffs_vector(coeffs.begin(), coeffs.end());
+
+    int coeffs_ind = 0;
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        for (int func_ind = 0; func_ind < total_basis_size_rank1[mu]; func_ind++, coeffs_ind++) {
+            auto ndens = basis_rank1[mu][func_ind].ndensity;
+            for (int ms_ind = 0; ms_ind < basis_rank1[mu][func_ind].num_ms_combs; ms_ind++) {
+                for (DENSITY_TYPE p = 0; p < ndens; p++) {
+                    basis_rank1[mu][func_ind].ctildes[ms_ind * ndens + p] *= basis_coeffs_vector[coeffs_ind];
+                }
+            }
+        }
+
+        for (int func_ind = 0; func_ind < total_basis_size[mu]; func_ind++, coeffs_ind++) {
+            auto ndens = basis[mu][func_ind].ndensity;
+            for (int ms_ind = 0; ms_ind < basis[mu][func_ind].num_ms_combs; ms_ind++) {
+                for (DENSITY_TYPE p = 0; p < ndens; p++) {
+                    basis[mu][func_ind].ctildes[ms_ind * ndens + p] *= basis_coeffs_vector[coeffs_ind];
+                }
+            }
+        }
+    }
+}
+
+// added by @alphataubio for E0 reference energy per element
+vector<DOUBLE_TYPE> ACECTildeBasisSet::get_E0vals() const {
+    return E0vals.to_vector();
+}
+
+void ACECTildeBasisSet::set_E0vals(const vector<DOUBLE_TYPE> &vals) {
+    E0vals = vals;
+}
+
+// added by @alphataubio for basis function selection/pruning  
+void ACECTildeBasisSet::trim_basis_by_mask(const vector<bool> &mask) {
+    // Calculate total number of basis functions
+    int total_basis_funcs = 0;
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        total_basis_funcs += total_basis_size_rank1[mu];
+        total_basis_funcs += total_basis_size[mu];
+    }
+    
+    if (mask.size() != total_basis_funcs) {
+        throw invalid_argument("Mask size (" + to_string(mask.size()) + 
+                             ") does not match total basis functions (" + to_string(total_basis_funcs) + ")");
+    }
+    
+    // Count how many basis functions we'll keep for each species
+    vector<int> new_total_basis_size_rank1(nelements, 0);
+    vector<int> new_total_basis_size(nelements, 0);
+    
+    size_t mask_idx = 0;
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        for (int func_ind = 0; func_ind < total_basis_size_rank1[mu]; func_ind++, mask_idx++) {
+            if (mask[mask_idx]) new_total_basis_size_rank1[mu]++;
+        }
+        for (int func_ind = 0; func_ind < total_basis_size[mu]; func_ind++, mask_idx++) {
+            if (mask[mask_idx]) new_total_basis_size[mu]++;
+        }
+    }
+    
+    // Create new basis arrays
+    ACECTildeBasisFunction **new_basis_rank1 = new ACECTildeBasisFunction *[nelements];
+    ACECTildeBasisFunction **new_basis = new ACECTildeBasisFunction *[nelements];
+    
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        new_basis_rank1[mu] = new ACECTildeBasisFunction[new_total_basis_size_rank1[mu]];
+        new_basis[mu] = new ACECTildeBasisFunction[new_total_basis_size[mu]];
+    }
+    
+    // Copy selected basis functions
+    mask_idx = 0;
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        int new_func_ind_rank1 = 0;
+        for (int func_ind = 0; func_ind < total_basis_size_rank1[mu]; func_ind++, mask_idx++) {
+            if (mask[mask_idx]) {
+                new_basis_rank1[mu][new_func_ind_rank1] = basis_rank1[mu][func_ind];
+                new_func_ind_rank1++;
+            } else {
+                // Clean up the function we're not keeping
+                if (!basis_rank1[mu][func_ind].is_proxy) {
+                    basis_rank1[mu][func_ind]._clean();
+                }
+            }
+        }
+        
+        int new_func_ind = 0;
+        for (int func_ind = 0; func_ind < total_basis_size[mu]; func_ind++, mask_idx++) {
+            if (mask[mask_idx]) {
+                new_basis[mu][new_func_ind] = basis[mu][func_ind];
+                new_func_ind++;
+            } else {
+                // Clean up the function we're not keeping
+                if (!basis[mu][func_ind].is_proxy) {
+                    basis[mu][func_ind]._clean();
+                }
+            }
+        }
+    }
+    
+    // Delete old arrays
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        delete[] basis_rank1[mu];
+        delete[] basis[mu];
+    }
+    delete[] basis_rank1;
+    delete[] basis;
+    
+    // Update pointers and sizes
+    basis_rank1 = new_basis_rank1;
+    basis = new_basis;
+    for (SPECIES_TYPE mu = 0; mu < nelements; mu++) {
+        total_basis_size_rank1[mu] = new_total_basis_size_rank1[mu];
+        total_basis_size[mu] = new_total_basis_size[mu];
+    }
+    
+    // Repack the flattened basis
+    pack_flatten_basis();
+}
+
 void ACECTildeBasisSet::save_yaml(const string &yaml_file_name) const {
     YAML_PACE::Node ctilde_basis_yaml;
 
@@ -1369,89 +1515,108 @@ void ACECTildeBasisSet::load_yaml(const string &yaml_file_name) {
         if (mu > nelements - 1)
             throw invalid_argument("yace::functions has species type key larger than nelements");
 
-        total_basis_size_rank1[mu] = 0;
-        total_basis_size[mu] = 0;
-
         auto ctildefunc_vec_yaml = p.second;
 
-        vector<ACECTildeBasisFunction> ctildefunc_vec;//TODO: read write is_half_ms_basis
+        // -------------------------------------------------------------------------
+        // REFACTOR START: Pre-calculate sizes to avoid vectors and stack objects
+        // -------------------------------------------------------------------------
+        
+        int count_rank1 = 0;
+        int count_other = 0;
+
+        // Pass 1: Count how many basis functions of each type exist
+        for (const auto &ctildefunc_yaml : ctildefunc_vec_yaml) {
+            SHORT_INT_TYPE rank = ctildefunc_yaml["rank"].as<SHORT_INT_TYPE>();
+            if (rank == 1) count_rank1++;
+            else count_other++;
+        }
+
+        total_basis_size_rank1[mu] = count_rank1;
+        total_basis_size[mu] = count_other;
+
+        // Allocate the final arrays immediately
+        basis_rank1[mu] = new ACECTildeBasisFunction[count_rank1];
+        basis[mu] = new ACECTildeBasisFunction[count_other];
+
+        int func_ind_rank1 = 0;
+        int func_ind_other = 0;
+
+        // Pass 2: Fill data directly into the heap memory
         for (const auto &ctildefunc_yaml: ctildefunc_vec_yaml) {
+            
+            SHORT_INT_TYPE rank = ctildefunc_yaml["rank"].as<SHORT_INT_TYPE>();
+            
+            // Pointer to the actual slot in the array we want to fill
+            ACECTildeBasisFunction* target;
 
-            ACECTildeBasisFunction ctildefunc;
-
-            ctildefunc.mu0 = ctildefunc_yaml["mu0"].as<SHORT_INT_TYPE>();
-            ctildefunc.rank = ctildefunc_yaml["rank"].as<SHORT_INT_TYPE>();
-            ctildefunc.ndensity = ctildefunc_yaml["ndensity"].as<SHORT_INT_TYPE>();
-            ctildefunc.num_ms_combs = ctildefunc_yaml["num_ms_combs"].as<SHORT_INT_TYPE>();
-
-            int_vec = ctildefunc_yaml["mus"].as<vector<int>>();
-            if (int_vec.size() != ctildefunc.rank)
-                throw invalid_argument("mus:: not sufficient number of values");
-            ctildefunc.mus = new SPECIES_TYPE[ctildefunc.rank];
-            for (int r = 0; r < ctildefunc.rank; r++)
-                ctildefunc.mus[r] = int_vec.at(r);
-
-            int_vec = ctildefunc_yaml["ns"].as<vector<int>>();
-            if (int_vec.size() != ctildefunc.rank)
-                throw invalid_argument("ns:: not sufficient number of values");
-            ctildefunc.ns = new NS_TYPE[ctildefunc.rank];
-            for (int r = 0; r < ctildefunc.rank; r++)
-                ctildefunc.ns[r] = int_vec.at(r);
-
-
-            int_vec = ctildefunc_yaml["ls"].as<vector<int>>();
-            if (int_vec.size() != ctildefunc.rank)
-                throw invalid_argument("ls:: not sufficient number of values");
-            ctildefunc.ls = new LS_TYPE[ctildefunc.rank];
-            for (int r = 0; r < ctildefunc.rank; r++)
-                ctildefunc.ls[r] = int_vec.at(r);
-
-            //this->ms_combs; //[num_ms_combs * rank]
-            int_vec = ctildefunc_yaml["ms_combs"].as<vector<int>>();
-            if (int_vec.size() != ctildefunc.rank * ctildefunc.num_ms_combs)
-                throw invalid_argument("ms_combs:: not sufficient number of values");
-            ctildefunc.ms_combs = new MS_TYPE[ctildefunc.rank * ctildefunc.num_ms_combs];
-            for (int r = 0; r < ctildefunc.rank * ctildefunc.num_ms_combs; r++)
-                ctildefunc.ms_combs[r] = int_vec.at(r);
-
-
-            // this->ctildes; //[num_of_ms_combs * ndensity]
-            double_vec = ctildefunc_yaml["ctildes"].as<vector<DOUBLE_TYPE >>();
-            if (double_vec.size() != ctildefunc.ndensity * ctildefunc.num_ms_combs)
-                throw invalid_argument("ctildes:: not sufficient number of values");
-            ctildefunc.ctildes = new DOUBLE_TYPE[ctildefunc.ndensity * ctildefunc.num_ms_combs];
-            for (int r = 0; r < ctildefunc.ndensity * ctildefunc.num_ms_combs; r++)
-                ctildefunc.ctildes[r] = double_vec.at(r);
-
-            ctildefunc_vec.emplace_back(ctildefunc);
-
-            if (ctildefunc.rank == 1)
-                total_basis_size_rank1[mu]++;
-            else
-                total_basis_size[mu]++;
-
-        } // end for over ctildefunc_vec_yaml
-
-//        cout << "total_basis_size_rank1[mu]=" << total_basis_size_rank1[mu] << endl;
-//        cout << "total_basis_size[mu]=" << total_basis_size[mu] << endl;
-
-        basis_rank1[mu] = new ACECTildeBasisFunction[total_basis_size_rank1[mu]];
-        basis[mu] = new ACECTildeBasisFunction[total_basis_size[mu]];
-        int func_ind_rank1 = 0, func_ind = 0;
-        for (const ACECTildeBasisFunction ctildefunc: ctildefunc_vec) {
-            if (ctildefunc.rank == 1) {
-                basis_rank1[mu][func_ind_rank1] = ctildefunc;
+            if (rank == 1) {
+                target = &basis_rank1[mu][func_ind_rank1];
                 func_ind_rank1++;
             } else {
-                basis[mu][func_ind] = ctildefunc;
-                func_ind++;
+                target = &basis[mu][func_ind_other];
+                func_ind_other++;
             }
-            //aggregate rankmax
-            if (this->rankmax < ctildefunc.rank)
-                this->rankmax = ctildefunc.rank;
-        }
-    }
 
+            // --- Fill the target object directly (No Copying!) ---
+
+            target->mu0 = ctildefunc_yaml["mu0"].as<SHORT_INT_TYPE>();
+            target->rank = rank;
+            target->ndensity = ctildefunc_yaml["ndensity"].as<SHORT_INT_TYPE>();
+            target->num_ms_combs = ctildefunc_yaml["num_ms_combs"].as<SHORT_INT_TYPE>();
+
+            // Aggregate rankmax
+            if (this->rankmax < target->rank)
+                this->rankmax = target->rank;
+
+            // Direct Allocation: MUS
+            int_vec = ctildefunc_yaml["mus"].as<vector<int>>();
+            if (int_vec.size() != target->rank)
+                throw invalid_argument("mus:: not sufficient number of values");
+            target->mus = new SPECIES_TYPE[target->rank];
+            for (int r = 0; r < target->rank; r++)
+                target->mus[r] = int_vec.at(r);
+
+            // Direct Allocation: NS
+            int_vec = ctildefunc_yaml["ns"].as<vector<int>>();
+            if (int_vec.size() != target->rank)
+                throw invalid_argument("ns:: not sufficient number of values");
+            target->ns = new NS_TYPE[target->rank];
+            for (int r = 0; r < target->rank; r++)
+                target->ns[r] = int_vec.at(r);
+
+            // Direct Allocation: LS
+            int_vec = ctildefunc_yaml["ls"].as<vector<int>>();
+            if (int_vec.size() != target->rank)
+                throw invalid_argument("ls:: not sufficient number of values");
+            target->ls = new LS_TYPE[target->rank];
+            for (int r = 0; r < target->rank; r++)
+                target->ls[r] = int_vec.at(r);
+
+            // Direct Allocation: MS_COMBS
+            int_vec = ctildefunc_yaml["ms_combs"].as<vector<int>>();
+            if (int_vec.size() != target->rank * target->num_ms_combs)
+                throw invalid_argument("ms_combs:: not sufficient number of values");
+            target->ms_combs = new MS_TYPE[target->rank * target->num_ms_combs];
+            for (int r = 0; r < target->rank * target->num_ms_combs; r++)
+                target->ms_combs[r] = int_vec.at(r);
+
+            // Direct Allocation: CTILDES
+            double_vec = ctildefunc_yaml["ctildes"].as<vector<DOUBLE_TYPE >>();
+            if (double_vec.size() != target->ndensity * target->num_ms_combs)
+                throw invalid_argument("ctildes:: not sufficient number of values");
+            target->ctildes = new DOUBLE_TYPE[target->ndensity * target->num_ms_combs];
+            for (int r = 0; r < target->ndensity * target->num_ms_combs; r++)
+                target->ctildes[r] = double_vec.at(r);
+
+            // Set ownership flag (just in case)
+            target->is_proxy = false;
+
+        } // end loop over yaml functions
+        // -------------------------------------------------------------------------
+        // REFACTOR END
+        // -------------------------------------------------------------------------
+
+    } // end loop over species (p)
 
     pack_flatten_basis();
 }

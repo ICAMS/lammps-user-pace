@@ -56,7 +56,7 @@ struct ACEAbstractBasisFunction {
     /**
     * flattened array of  computed combinations of (m1, m2, ..., m_rank)
     * which have non-zero general Clebsch-Gordan coefficient:
-    *  \f$ \mathbf{m}_1, \dots, \mathbf{m}_\mathrm{num ms combs}\f$ =
+    * \f$ \mathbf{m}_1, \dots, \mathbf{m}_\mathrm{num ms combs}\f$ =
     * \f$ (m_1, m_2, \dots, m_{rank})_1,  \dots, (m_1, m_2, \dots, m_{rank})_{\mathrm{num ms combs}} \f$,
     * size =  num_ms_combs * rank,
     * effective shape: [num_ms_combs][rank]
@@ -211,8 +211,10 @@ struct ACECTildeBasisFunction : public ACEAbstractBasisFunction {
     /**
      * Copy constructor, to fulfill the Rule of Three.
      * Always copy the dynamic memory, even if the source is a proxy object.
+     * FIX: Explicitly initialize ctildes to nullptr to avoid deleting garbage in _copy_from
      */
-    ACECTildeBasisFunction(const ACECTildeBasisFunction &other) {
+    ACECTildeBasisFunction(const ACECTildeBasisFunction &other) 
+        : ACEAbstractBasisFunction(), ctildes(nullptr) {
         _copy_from(other);
     }
 
