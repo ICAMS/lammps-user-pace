@@ -168,16 +168,6 @@ public:
 
     void set_all_coeffs(const vector<DOUBLE_TYPE> &coeffs) override;
 
-    // added by @alphataubio, needed by FitSNAP PR278
-    vector<DOUBLE_TYPE> get_basis_coeffs() const;
-    void set_basis_coeffs(const vector<DOUBLE_TYPE> &coeffs);
-
-    // added by @alphataubio for E0 reference energy per element
-    vector<DOUBLE_TYPE> get_E0vals() const;
-    void set_E0vals(const vector<DOUBLE_TYPE> &vals);
-
-    // added by @alphataubio for basis function selection/pruning
-    void trim_basis_by_mask(const vector<bool> &mask);
 
     void _post_load_radial_SHIPsBasic(SHIPsRadialFunctions *ships_radial_functions);
 };
