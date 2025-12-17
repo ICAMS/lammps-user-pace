@@ -17,3 +17,8 @@ a.out
 __pycache__
 
 /ML-PACE/cnpy
+.DS_Store
+*.egg-info
+*.so
+*.pyc
+/python/build
