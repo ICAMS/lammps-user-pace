@@ -330,7 +330,7 @@ void GRACEFSBEvaluator::init(GRACEFSBasisSet &basis_set) {
 
 
 void GRACEFSBEvaluator::resize_neighbours_cache(int max_jnum) {
-    if (R_cache.get_dim(0) < max_jnum) {
+    if (r_norms.get_dim(0) < max_jnum) {
 
         //TODO: implement grow
         R_cache.resize(max_jnum, basis_set.nradmax, basis_set.lmax + 1);
