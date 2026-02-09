@@ -33,7 +33,7 @@
 
 #define VERSION_YEAR 2025
 #define VERSION_MONTH 12
-#define VERSION_DAY 4
+#define VERSION_DAY 4.patch1
 
 #endif //ACE_VERSION_Hls
 
