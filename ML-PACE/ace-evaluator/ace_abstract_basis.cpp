@@ -151,6 +151,7 @@ ACEAbstractBasisSet::~ACEAbstractBasisSet() {
 
 void ACEAbstractBasisSet::_copy_scalar_memory(const ACEAbstractBasisSet &src) {
     deltaSplineBins = src.deltaSplineBins;
+    summed_neighbour_A = src.summed_neighbour_A;
 
     map_bond_specifications = src.map_bond_specifications;
     map_embedding_specifications = src.map_embedding_specifications;

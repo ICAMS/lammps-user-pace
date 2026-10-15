@@ -31,6 +31,7 @@
 #include "ace-evaluator/ace_arraynd.h"
 #include "ace-evaluator/ace_types.h"
 #include <functional>
+#include <vector>
 
 
 using namespace std;
@@ -93,6 +94,23 @@ public:
      * @return: populate 'values' and 'derivatives'
      */
     void calcSplines(DOUBLE_TYPE r, SHORT_INT_TYPE func_ind);
+};
+
+/**
+ * Radial functions given as tables (radbasename "Tabulated"): values and r-derivatives on the
+ * uniform grid r_i = i * rcut / nbins, i = 0..nbins, interpolated by cubic Hermite -- the scheme of
+ * the look-up tables (SplineInterpolator), so a table on the look-up grid (nbins = rcut /
+ * deltaSplineBins) is reproduced exactly.  gk[k] are the g_k read by rank-1 functions,
+ * rnl[n * (lmax + 1) + l] the R_nl read by rank > 1; an empty entry is the zero function.
+ */
+struct TabulatedRadial {
+    int nbins = 0;
+    DOUBLE_TYPE rcut = 0;
+    vector<vector<DOUBLE_TYPE>> gk, dgk, rnl, drnl;
+
+    /** values[f], dvalues[f] for f < count at r (0 <= r <= rcut) from tables f, df */
+    void interpolate(const vector<vector<DOUBLE_TYPE>> &f, const vector<vector<DOUBLE_TYPE>> &df,
+                     DOUBLE_TYPE r, DOUBLE_TYPE *values, DOUBLE_TYPE *dvalues, size_t count) const;
 };
 
 /**
@@ -191,6 +209,8 @@ public:
             "cheb2"); ///< Chebyshev polynomials of the second kind, shape: [nradbase+1]
 
     //--------------------------------------------------------------------------
+
+    std::vector<TabulatedRadial> tables; ///< radbasename "Tabulated" only, [mu_i * nelements + mu_j]
 
     Array2D<DOUBLE_TYPE> gr_vec;
     Array2D<DOUBLE_TYPE> dgr_vec;
@@ -323,6 +343,14 @@ public:
     void simplified_bessel(DOUBLE_TYPE cut, DOUBLE_TYPE r);
 
     void test_zero_func(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcut, DOUBLE_TYPE r);
+
+    /**
+     * radbasename "Tabulated": g_k (gr, dgr) or R_nl (fr, dfr) of bond mu_i-mu_j at r from `tables`,
+     * zero outside (cut_in - dcut_in, cut) and with the inner cutoff applied as `radbase` applies it
+     */
+    void tabulated_gk(SPECIES_TYPE mu_i, SPECIES_TYPE mu_j, DOUBLE_TYPE r);
+
+    void tabulated_rnl(SPECIES_TYPE mu_i, SPECIES_TYPE mu_j, DOUBLE_TYPE r);
 
     /**
      * Setup all radial functions for element pair mu_i-mu_j and distance r

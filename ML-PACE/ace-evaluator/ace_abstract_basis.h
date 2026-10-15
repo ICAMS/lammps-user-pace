@@ -99,13 +99,22 @@ struct ACEBondSpecification {
     DOUBLE_TYPE dcut_in = 0;
     string inner_cutoff_type = "distance"; // new behaviour is default
 
+    // radbasename "Tabulated" (TabulatedRadial): no radparameters / radcoefficients; instead
+    //   radtable: {nbins: N, gk: [{k, f, df}, ...], rnl: [{n, l, f, df}, ...]}
+    // with k, n 1-based (as in `functions`) and f, df the values and r-derivatives at r_i = i * rcut / N,
+    // i = 0..N.  rnl index here is (n - 1) * (lmax + 1) + l; absent entries are zero.
+    int radtable_nbins = 0;
+    vector<vector<DOUBLE_TYPE>> radtable_gk, radtable_dgk, radtable_rnl, radtable_drnl;
+
     bool operator==(const ACEBondSpecification &another) const {
         return (nradbasemax == another.nradbasemax) && (lmax == another.lmax) &&
                (nradbasemax == another.nradbasemax) && (radbasename == another.radbasename) &&
                (radparameters == another.radparameters) && (radcoefficients == another.radcoefficients) &&
                (prehc == another.prehc) && (lambdahc == another.lambdahc) && (rcut == another.rcut) &&
                (dcut == another.dcut) && (rcut_in == another.rcut_in) && (dcut_in == another.dcut_in) &&
-               (inner_cutoff_type == another.inner_cutoff_type);
+               (inner_cutoff_type == another.inner_cutoff_type) && (radtable_nbins == another.radtable_nbins) &&
+               (radtable_gk == another.radtable_gk) && (radtable_dgk == another.radtable_dgk) &&
+               (radtable_rnl == another.radtable_rnl) && (radtable_drnl == another.radtable_drnl);
     }
 
     bool operator!=(const ACEBondSpecification &another) const {
@@ -116,7 +125,11 @@ struct ACEBondSpecification {
         stringstream ss;
         ss << "ACEBondSpecification(nradmax=" << nradmax << ", lmax=" << lmax << ", nradbasemax=" << nradbasemax
            << ", radbasename=" <<
-           radbasename << ", crad=(" << radcoefficients.at(0).at(0).at(0) << "...), ";
+           radbasename;
+        if (radbasename == "Tabulated")
+            ss << ", radtable(nbins=" << radtable_nbins << "), ";
+        else
+            ss << ", crad=(" << radcoefficients.at(0).at(0).at(0) << "...), ";
         ss << "rcut=" << rcut << ", dcut=" << dcut;
         ss << ", rcut_in=" << rcut_in << ", dcut_in=" << dcut_in;
         ss << ", inner_cutoff_type=" << inner_cutoff_type;
@@ -135,8 +148,15 @@ struct ACEBondSpecification {
             nradmax = bond_yaml["nradmax"].as<NS_TYPE>();
             lmax = bond_yaml["lmax"].as<LS_TYPE>();
             nradbasemax = bond_yaml["nradbasemax"].as<NS_TYPE>();
-            radparameters = bond_yaml["radparameters"].as<vector<DOUBLE_TYPE>>();
-            radcoefficients = bond_yaml["radcoefficients"].as<vector<vector<vector<DOUBLE_TYPE>>>>();
+            bool tabulated = radbasename == "Tabulated";
+            if (!tabulated || bond_yaml["radparameters"])
+                radparameters = bond_yaml["radparameters"].as<vector<DOUBLE_TYPE>>();
+            else
+                radparameters = {1.0};   // lambda: unused by a table
+            if (!tabulated || bond_yaml["radcoefficients"])
+                radcoefficients = bond_yaml["radcoefficients"].as<vector<vector<vector<DOUBLE_TYPE>>>>();
+            if (tabulated)
+                radtable_from_YAML(bond_yaml["radtable"]);
             prehc = bond_yaml["prehc"].as<DOUBLE_TYPE>();
             lambdahc = bond_yaml["lambdahc"].as<DOUBLE_TYPE>();
             rcut = bond_yaml["rcut"].as<DOUBLE_TYPE>();
@@ -151,6 +171,62 @@ struct ACEBondSpecification {
         }
     }
 
+    void radtable_from_YAML(YAML_PACE::Node t) {
+        if (!t)
+            throw invalid_argument("radbasename `Tabulated` needs a `radtable`");
+        radtable_nbins = t["nbins"].as<int>();
+        if (radtable_nbins < 1)
+            throw invalid_argument("radtable::nbins must be positive");
+        size_t nnodes = radtable_nbins + 1;
+        radtable_gk.assign(nradbasemax, {});
+        radtable_dgk.assign(nradbasemax, {});
+        radtable_rnl.assign(nradmax * (lmax + 1), {});
+        radtable_drnl.assign(nradmax * (lmax + 1), {});
+        auto read = [nnodes](const YAML_PACE::Node &e, vector<DOUBLE_TYPE> &f, vector<DOUBLE_TYPE> &df) {
+            f = e["f"].as<vector<DOUBLE_TYPE>>();
+            df = e["df"].as<vector<DOUBLE_TYPE>>();
+            if (f.size() != nnodes || df.size() != nnodes)
+                throw invalid_argument("radtable entry must have nbins + 1 values `f` and derivatives `df`");
+        };
+        if (t["gk"])
+            for (const auto &e: t["gk"]) {
+                int k = e["k"].as<int>();
+                if (k < 1 || k > nradbasemax)
+                    throw invalid_argument("radtable::gk::k outside 1..nradbasemax");
+                read(e, radtable_gk.at(k - 1), radtable_dgk.at(k - 1));
+            }
+        if (t["rnl"])
+            for (const auto &e: t["rnl"]) {
+                int n = e["n"].as<int>(), l = e["l"].as<int>();
+                if (n < 1 || n > nradmax || l < 0 || l > lmax)
+                    throw invalid_argument("radtable::rnl (n, l) outside 1..nradmax, 0..lmax");
+                read(e, radtable_rnl.at((n - 1) * (lmax + 1) + l), radtable_drnl.at((n - 1) * (lmax + 1) + l));
+            }
+    }
+
+    YAML_PACE::Node radtable_to_YAML() const {
+        YAML_PACE::Node t;
+        t["nbins"] = radtable_nbins;
+        for (size_t k = 0; k < radtable_gk.size(); k++)
+            if (!radtable_gk[k].empty()) {
+                YAML_PACE::Node e;
+                e["k"] = (int) k + 1;
+                e["f"] = radtable_gk[k];
+                e["df"] = radtable_dgk[k];
+                t["gk"].push_back(e);
+            }
+        for (size_t i = 0; i < radtable_rnl.size(); i++)
+            if (!radtable_rnl[i].empty()) {
+                YAML_PACE::Node e;
+                e["n"] = (int) (i / (lmax + 1)) + 1;
+                e["l"] = (int) (i % (lmax + 1));
+                e["f"] = radtable_rnl[i];
+                e["df"] = radtable_drnl[i];
+                t["rnl"].push_back(e);
+            }
+        return t;
+    }
+
     YAML_PACE::Node to_YAML() const {
         YAML_PACE::Node bond_yaml;
         bond_yaml.SetStyle(YAML_PACE::EmitterStyle::Flow);
@@ -160,7 +236,10 @@ struct ACEBondSpecification {
 
         bond_yaml["radbasename"] = this->radbasename;
         bond_yaml["radparameters"] = this->radparameters;
-        bond_yaml["radcoefficients"] = this->radcoefficients;
+        if (radbasename == "Tabulated")
+            bond_yaml["radtable"] = radtable_to_YAML();
+        else
+            bond_yaml["radcoefficients"] = this->radcoefficients;
 
         bond_yaml["prehc"] = this->prehc;
         bond_yaml["lambdahc"] = this->lambdahc;
@@ -198,6 +277,14 @@ public:
     ACECartesianSphericalHarmonics spherical_harmonics; ///< object to work with spherical harmonics in Cartesian representation
 
     bool is_sort_functions = true; ///< flag to specify, whether to sort the basis functions or preserve the order
+    /// Every neighbour accumulates into the element-0 A basis (and reads the element-0 weights) whatever its
+    /// species; species enter only through the per-bond radial functions R_nl^{mu_i mu_j}.  This is the form of
+    /// a linear ACE whose A basis pools the neighbour species (e.g. a species-embedded / tensor-reduced ACE,
+    /// its embedding channels folded into n): without it, every product factor must be expanded over the
+    /// neighbour species, up to nelements^rank products per function.  The functions then use mu = 0 for
+    /// every factor.  yaml key `summed_neighbour_A`.
+    bool summed_neighbour_A = false;
+#define ACE_HAS_SUMMED_NEIGHBOUR_A 1   // lets a client (e.g. LAMMPS pace/kk) compile against bases with or without it
     //for multispecies
 
     map<SPECIES_TYPE, ACEEmbeddingSpecification> map_embedding_specifications;

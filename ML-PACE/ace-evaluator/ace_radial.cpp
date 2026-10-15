@@ -140,6 +140,8 @@ void ACERadialFunctions::init(NS_TYPE nradb, LS_TYPE lmax, NS_TYPE nradial, DOUB
     cheb2.init(nradbase + 1, "cheb2");
 
 
+    tables.assign(nelements * nelements, TabulatedRadial());
+
     splines_gk.init(nelements, nelements, "splines_gk");
     splines_rnl.init(nelements, nelements, "splines_rnl");
     splines_hc.init(nelements, nelements, "splines_hc");
@@ -257,6 +259,8 @@ ACERadialFunctions::radbase(DOUBLE_TYPE lam, DOUBLE_TYPE cut, DOUBLE_TYPE dcut, 
             chebLinear(lam, cut, dcut, r);
         } else if (radbasename == "TEST_SBessel" || radbasename == "SBessel") {
             simplified_bessel(cut, r);
+        } else if (radbasename == "Tabulated") {
+            throw invalid_argument("radbasename `Tabulated` is per bond: use tabulated_gk(mu_i, mu_j, r)");
         } else if (radbasename.rfind("TEST_", 0) == 0) {
             test_zero_func(lam, cut, dcut, r);
         } else {
@@ -487,9 +491,79 @@ void ACERadialFunctions::all_radfunc(SPECIES_TYPE mu_i, SPECIES_TYPE mu_j, DOUBL
     DOUBLE_TYPE r_in = cut_in(mu_i, mu_j);
     DOUBLE_TYPE dr_in = dcut_in(mu_i, mu_j);
 
+    if (radbasenameij(mu_i, mu_j) == "Tabulated") {
+        tabulated_rnl(mu_i, mu_j, r); // update fr(nr, l),  dfr(nr, l) directly
+        return;
+    }
     // set up radial functions
     radbase(lam, r_cut, dr_cut, radbasenameij(mu_i, mu_j), r, r_in, dr_in); //update gr, dgr
     radfunc(mu_i, mu_j); // update fr(nr, l),  dfr(nr, l)
+}
+
+
+void TabulatedRadial::interpolate(const vector<vector<DOUBLE_TYPE>> &f, const vector<vector<DOUBLE_TYPE>> &df,
+                                  DOUBLE_TYPE r, DOUBLE_TYPE *values, DOUBLE_TYPE *dvalues, size_t count) const {
+    DOUBLE_TYPE h = rcut / nbins;
+    DOUBLE_TYPE x = r / h;
+    int i = static_cast<int>(x);
+    if (i >= nbins) i = nbins - 1;
+    if (i < 0) i = 0;
+    DOUBLE_TYPE t = x - i, t2 = t * t, u = 1 - t;
+    // cubic Hermite basis and its t-derivative
+    DOUBLE_TYPE h00 = (1 + 2 * t) * u * u, h10 = t * u * u, h01 = t2 * (3 - 2 * t), h11 = t2 * (t - 1);
+    DOUBLE_TYPE d00 = 6 * t2 - 6 * t, d10 = 3 * t2 - 4 * t + 1, d01 = -d00, d11 = 3 * t2 - 2 * t;
+    for (size_t k = 0; k < count; k++) {
+        if (k >= f.size() || f[k].empty()) {
+            values[k] = 0;
+            dvalues[k] = 0;
+            continue;
+        }
+        const auto &v = f[k];
+        const auto &dv = df[k];
+        values[k] = h00 * v[i] + h10 * h * dv[i] + h01 * v[i + 1] + h11 * h * dv[i + 1];
+        dvalues[k] = (d00 * v[i] + d10 * h * dv[i] + d01 * v[i + 1] + d11 * h * dv[i + 1]) / h;
+    }
+}
+
+
+/** zero outside (cut_in - dcut_in, cut), the table inside; then radbase's inner cutoff */
+static void tabulated_eval(const TabulatedRadial &tab, bool rnl, DOUBLE_TYPE r, DOUBLE_TYPE cut,
+                           DOUBLE_TYPE cut_in, DOUBLE_TYPE dcut_in, const string &inner_cutoff_type,
+                           DOUBLE_TYPE *values, DOUBLE_TYPE *dvalues, size_t count) {
+    if (inner_cutoff_type == "zbl")
+        cut_in = dcut_in == 0;   // as radbase
+    if (r <= cut_in - dcut_in || r >= cut) {
+        for (size_t k = 0; k < count; k++) values[k] = dvalues[k] = 0;
+        return;
+    }
+    if (rnl)
+        tab.interpolate(tab.rnl, tab.drnl, r, values, dvalues, count);
+    else
+        tab.interpolate(tab.gk, tab.dgk, r, values, dvalues, count);
+    if (inner_cutoff_type == "distance" || inner_cutoff_type == "zbl") {
+        DOUBLE_TYPE fc, dfc;
+        cutoff_func_poly(r, cut_in, dcut_in, fc, dfc);
+        fc = 1 - fc;
+        dfc = -dfc;
+        for (size_t k = 0; k < count; k++) {
+            DOUBLE_TYPE v = values[k];
+            values[k] = v * fc;
+            dvalues[k] = dvalues[k] * fc + v * dfc;
+        }
+    }
+}
+
+
+void ACERadialFunctions::tabulated_gk(SPECIES_TYPE mu_i, SPECIES_TYPE mu_j, DOUBLE_TYPE r) {
+    tabulated_eval(tables.at(mu_i * nelements + mu_j), false, r, cut(mu_i, mu_j), cut_in(mu_i, mu_j),
+                   dcut_in(mu_i, mu_j), inner_cutoff_type, gr.get_data(), dgr.get_data(), gr.get_size());
+}
+
+
+void ACERadialFunctions::tabulated_rnl(SPECIES_TYPE mu_i, SPECIES_TYPE mu_j, DOUBLE_TYPE r) {
+    // fr is [nradial][lmax + 1], contiguous: index n * (lmax + 1) + l, as TabulatedRadial::rnl
+    tabulated_eval(tables.at(mu_i * nelements + mu_j), true, r, cut(mu_i, mu_j), cut_in(mu_i, mu_j),
+                   dcut_in(mu_i, mu_j), inner_cutoff_type, fr.get_data(), dfr.get_data(), fr.get_size());
 }
 
 
@@ -510,10 +584,12 @@ void ACERadialFunctions::setuplookupRadspline() {
             delta_in = dcut_in(elei, elej);
             radbasename = radbasenameij(elei, elej);
 
+            RadialFunctions gk_func = (radbasename == "Tabulated")
+                    ? RadialFunctions(std::bind(&ACERadialFunctions::tabulated_gk, this, elei, elej, _1))
+                    : RadialFunctions(std::bind(&ACERadialFunctions::radbase, this, lam, r_cut, dr_cut,
+                                                radbasename, _1, r_in, delta_in));
             splines_gk(elei, elej).setupSplines(gr.get_size(),
-                                                std::bind(&ACERadialFunctions::radbase, this, lam, r_cut, dr_cut,
-                                                          radbasename,
-                                                          _1, r_in, delta_in),//update gr, dgr
+                                                gk_func,//update gr, dgr
                                                 gr.get_data(),
                                                 dgr.get_data(), deltaSplineBins, r_cut);
 

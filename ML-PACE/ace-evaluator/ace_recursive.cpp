@@ -30,6 +30,8 @@
 
 #include "ace-evaluator/ace_recursive.h"
 
+#include <algorithm>
+
 #include "ace-evaluator/ace_abstract_basis.h"
 #include "ace-evaluator/ace_types.h"
 
@@ -173,6 +175,23 @@ void ACEDAG::init(Array2D<int> xAspec,
     nodes_pre.resize(0, 0);
     coeffs_pre.resize(0, 0);
     haschild.resize(0);
+
+    // the leaves in interleaved order, for the one-density passes (see leaf_nodes)
+    leaf_nodes.clear();
+    leaf_coeffs.clear();
+    if (ndensity == 1 && num2_leaf > 0) {
+        const int chunk = (num2_leaf + LEAF_INTERLEAVE - 1) / LEAF_INTERLEAVE;
+        leaf_nodes.reserve(2 * num2_leaf);
+        leaf_coeffs.reserve(num2_leaf);
+        for (int q = 0; q < chunk; q++)
+            for (int c = 0; c < LEAF_INTERLEAVE; c++) {
+                const int k = c * chunk + q;
+                if (k >= num2_leaf) continue;
+                leaf_nodes.push_back(nodes(num2_int + k, 0));
+                leaf_nodes.push_back(nodes(num2_int + k, 1));
+                leaf_coeffs.push_back(coeffs(num2_int + k, 0));
+            }
+    }
 
     /* finalize dag: allocate buffer storage  */
     AAbuf.resize(num1 + num2_int);
@@ -400,12 +419,16 @@ void ACERecursiveEvaluator::init(ACECTildeBasisSet *basis_set, int heuristic) {
     Y_cache.fill({0, 0});
 
     DY_cache.init(1, basis_set->lmax + 1, "dY_dense_cache");
+
+    // per-neighbour (l, m >= 0) sums of the force pass
+    const int nlm = (basis_set->lmax + 1) * (basis_set->lmax + 2) / 2;
+    force_P.init(nlm, "force_P");
+    force_Q.init(nlm, "force_Q");
     DY_cache.fill({0., 0.});
 
     //hard-core repulsion
     DCR_cache.init(1, "DCR_cache");
     DCR_cache.fill(0);
-    dB_flatten.init(basis_set->max_dB_array_size, "dB_flatten");
 
     // resize the arrays
     species_dags.resize(basis_set->nelements);
@@ -760,7 +783,7 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
     DOUBLE_TYPE evdwl = 0, evdwl_cut = 0, rho_core = 0;
     DOUBLE_TYPE r_norm;
     DOUBLE_TYPE xn, yn, zn, r_xyz;
-    DOUBLE_TYPE R, GR, DGR, R_over_r, DR, DCR;
+    DOUBLE_TYPE R, GR, DGR, DCR;
     DOUBLE_TYPE *r_hat;
 
     SPECIES_TYPE mu_j;
@@ -777,15 +800,12 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
     int j, jj;
     SHORT_INT_TYPE factor;
 
-    ACEComplex Y{0, 0}, Y_DR{0., 0.};
+    ACEComplex Y{0, 0};
     Array1D<ACEComplex> A_cache(basis_set->rankmax, "A_cache");
 
     Array1D<ACEComplex> dA(basis_set->rankmax, "dA");
     Array1D<int> spec(basis_set->rankmax, "spec");
 
-    dB_flatten.fill({0., 0.});
-
-    ACEDYcomponent grad_phi_nlm{0, 0}, DY{0., 0};
 
     //size is +1 of max to avoid out-of-boundary array access in double-triangular scheme
 //    Array1D<ACEComplex> A_forward_prod(basis_set->rankmax + 1, "A_forward_prod");
@@ -922,6 +942,7 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
 
 
         basis_set->radial_functions->evaluate(r_norm, basis_set->nradbase, nradiali, mu_i, mu_j);
+        const SPECIES_TYPE mu_a = basis_set->summed_neighbour_A ? 0 : mu_j;   // A index; the radial is per bond
         basis_set->spherical_harmonics.compute_ylm(r_hat[0], r_hat[1], r_hat[2], lmaxi);
         //loop for computing A's
         //rank = 1
@@ -933,12 +954,12 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
             printf("dgr(n=%d)(r=%f) = %f\n", n, r_norm, dgr(n));
 #endif
             DG_cache(jj, n) = dgr(n);
-            A_rank1(mu_j, n) += GR * Y00;
+            A_rank1(mu_a, n) += GR * Y00;
         }
         //loop for computing A's
         // for rank > 1
         for (n = 0; n < nradiali; n++) {
-            auto &A_lm = A(mu_j, n);
+            auto &A_lm = A(mu_a, n);
             for (l = 0; l <= lmaxi; l++) {
                 R = fr(n, l);
 #ifdef DEBUG_ENERGY_CALCULATIONS
@@ -954,11 +975,15 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
                     printf("Y(lm=%d,%d)=(%f, %f)\n", l, m, Y.real, Y.img);
 #endif
                     A_lm(l, m) += R * Y; //accumulation sum over neighbours
-                    Y_jj(l, m) = Y;
-                    DY_jj(l, m) = dylm(l, m);
                 }
             }
         }
+        // Y and dY depend on (l, m) only: cache them once per neighbour, not once per n
+        for (l = 0; l <= lmaxi; l++)
+            for (m = 0; m <= l; m++) {
+                Y_jj(l, m) = ylm(l, m);
+                    DY_jj(l, m) = dylm(l, m);
+                }
 
         //hard-core repulsion
         rho_core += basis_set->radial_functions->cr;
@@ -1029,7 +1054,37 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
                            dag.Aspec(idx, 3));
 
 
-    if (recursive) {
+    if (recursive && ndensity == 1) {
+        /* STAGE 2: FORWARD PASS, one density: the same products as below, with rho summed in registers
+         * (four partial sums over the leaves, in dag.leaf_nodes order) instead of read-modify-writes of
+         * rhos(0) through memory, which serialised the leaf loop. */
+        const int *dag_nodes = dag.nodes.get_data();
+        const DOUBLE_TYPE *dag_coefs = dag.coeffs.get_data();
+        ACEComplex *AA = dag.AAbuf.get_data();
+        const int num2_int = dag.get_num2_int();
+        const int num2_leaf = dag.get_num2_leaf();
+        DOUBLE_TYPE r0 = 0, r1 = 0, r2 = 0, r3 = 0;
+        // interior nodes (save AA)
+        for (int k = 0; k < num2_int; k++) {
+            const ACEComplex AAcur = AA[dag_nodes[2 * k]] * AA[dag_nodes[2 * k + 1]];
+            AA[num1 + k] = AAcur;
+            r0 += AAcur.real_part_product(dag_coefs[k]);
+        }
+        // leaf nodes -> no need to store in AAbuf
+        const int *ln = dag.leaf_nodes.data();
+        const DOUBLE_TYPE *lc = dag.leaf_coeffs.data();
+        int k = 0;
+        for (; k + 3 < num2_leaf; k += 4) {
+            r0 += AA[ln[2 * k]].real_part_product(AA[ln[2 * k + 1]]) * lc[k];
+            r1 += AA[ln[2 * k + 2]].real_part_product(AA[ln[2 * k + 3]]) * lc[k + 1];
+            r2 += AA[ln[2 * k + 4]].real_part_product(AA[ln[2 * k + 5]]) * lc[k + 2];
+            r3 += AA[ln[2 * k + 6]].real_part_product(AA[ln[2 * k + 7]]) * lc[k + 3];
+        }
+        for (; k < num2_leaf; k++)
+            r0 += AA[ln[2 * k]].real_part_product(AA[ln[2 * k + 1]]) * lc[k];
+        rhos(0) += (r0 + r1) + (r2 + r3);
+
+    } else if (recursive) {
 #ifdef DEBUG_ENERGY_CALCULATIONS
         printf("Recursive Julia-style evaluator\n");
 #endif
@@ -1181,7 +1236,47 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
 
         /* --------- we now continue with the recursive code --------- */
 
-        if (recursive) {
+        if (recursive && ndensity == 1) {
+            /* STAGE 2: BACKWARD PASS, one density: the leaves first (a leaf's own weight is never read, so it is
+             * neither stored nor zeroed; dag.leaf_nodes order), then the interior nodes from the last down.  Half of
+             * consecutive interior nodes share their first child on a large linear ACE, so that child's
+             * contributions are summed in a register and written out when the child changes.  A pending child is
+             * always written before its own weight is read: it differs from the current node's first child, which
+             * is smaller than the current node. */
+            const int *dag_nodes = dag.nodes.get_data();
+            const DOUBLE_TYPE *dag_coefs = dag.coeffs.get_data();
+            const ACEComplex *AA = dag.AAbuf.get_data();
+            ACEComplex *W = dag.w.get_data();
+            const int num2_int = dag.get_num2_int();
+            const int num2_leaf = dag.get_num2_leaf();
+            const DOUBLE_TYPE dF = dF_drho(0);
+            std::fill(W, W + num1 + num2_int, ACEComplex{0., 0.});
+            const int *ln = dag.leaf_nodes.data();
+            const DOUBLE_TYPE *lc = dag.leaf_coeffs.data();
+            for (int k = 0; k < num2_leaf; k++) {
+                const int i1 = ln[2 * k], i2 = ln[2 * k + 1];
+                const DOUBLE_TYPE wcur = dF * lc[k];        // real: nothing feeds a leaf
+                W[i1] += AA[i2] * wcur;
+                W[i2] += AA[i1] * wcur;
+            }
+            int cur = -1;
+            ACEComplex acc{0., 0.};
+            for (int k = num2_int - 1; k >= 0; k--) {
+                const int i1 = dag_nodes[2 * k], i2 = dag_nodes[2 * k + 1];
+                if (i1 != cur) {
+                    if (cur >= 0) W[cur] += acc;
+                    cur = i1;
+                    acc = {0., 0.};
+                }
+                ACEComplex wcur = W[num1 + k];
+                wcur += dF * dag_coefs[k];
+                acc += wcur * AA[i2];
+                if (i2 == cur) acc += wcur * AA[i1];
+                else W[i2] += wcur * AA[i1];
+            }
+            if (cur >= 0) W[cur] += acc;
+
+        } else if (recursive) {
             /* STAGE 2:  BACKWARD PASS */
             int i1, i2;
             ACEComplex AA1{0.0, 0};
@@ -1298,6 +1393,7 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
         // loop over neighbour atoms for force calculations
         for (jj = 0; jj < jnum_actual; ++jj) {
             mu_j = elements(jj);
+            const SPECIES_TYPE mu_w = basis_set->summed_neighbour_A ? 0 : mu_j;   // weights index, as mu_a
             r_hat = &rhats(jj, 0);
             inv_r_norm = inv_r_norms(jj);
 
@@ -1315,11 +1411,11 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
 
             //for rank = 1
             for (n = 0; n < nradbasei; ++n) {
-                if (weights_rank1(mu_j, n) == 0)
+                if (weights_rank1(mu_w, n) == 0)
                     continue;
                 auto &DG = DG_cache(jj, n);
                 DGR = DG * Y00;
-                DGR *= weights_rank1(mu_j, n);
+                DGR *= weights_rank1(mu_w, n);
 #ifdef DEBUG_FORCES_CALCULATIONS
                 printf("r=1: (n,l,m)=(%d, 0, 0)\n", n + 1);
                 printf("\tGR(n=%d, r=%f)=%f\n", n + 1, r_norm, gr(n));
@@ -1332,47 +1428,40 @@ ACERecursiveEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *
             }
 
             //for rank > 1
-            for (n = 0; n < nradiali; n++) {
-                for (l = 0; l <= lmaxi; l++) {
-                    R_over_r = R_cache(jj, n, l) * inv_r_norm;
-                    DR = DR_cache(jj, n, l);
-
-                    // for m>=0
-                    for (m = 0; m <= l; m++) {
-                        ACEComplex w = weights(mu_j, n, l, m);
-                        if (w == 0)
-                            continue;
-                        //counting for -m cases if m>0
-                        // if (m > 0) w *= 2;  // not needed for recursive eval
-
-                        DY = DY_cache_jj(l, m);
-                        Y_DR = Y_cache_jj(l, m) * DR;
-
-                        grad_phi_nlm.a[0] = Y_DR * r_hat[0] + DY.a[0] * R_over_r;
-                        grad_phi_nlm.a[1] = Y_DR * r_hat[1] + DY.a[1] * R_over_r;
-                        grad_phi_nlm.a[2] = Y_DR * r_hat[2] + DY.a[2] * R_over_r;
-#ifdef DEBUG_FORCES_CALCULATIONS
-                        printf("d_phi(n=%d, l=%d, m=%d) = ((%f,%f), (%f,%f), (%f,%f))\n", n + 1, l, m,
-                               grad_phi_nlm.a[0].real, grad_phi_nlm.a[0].img,
-                               grad_phi_nlm.a[1].real, grad_phi_nlm.a[1].img,
-                               grad_phi_nlm.a[2].real, grad_phi_nlm.a[2].img);
-
-                        printf("weights(n,l,m)(%d,%d,%d) = (%f,%f)\n", n + 1, l, m, w.real, w.img);
-                        //if (m>0) w*=2;
-                        printf("dF(n,l,m)(%d, %d, %d) += (%f, %f, %f)\n", n + 1, l, m,
-                               w.real_part_product(grad_phi_nlm.a[0]),
-                               w.real_part_product(grad_phi_nlm.a[1]),
-                               w.real_part_product(grad_phi_nlm.a[2])
-                        );
-#endif
-                        // real-part multiplication only
-                        f_ji[0] += w.real_part_product(grad_phi_nlm.a[0]);
-                        f_ji[1] += w.real_part_product(grad_phi_nlm.a[1]);
-                        f_ji[2] += w.real_part_product(grad_phi_nlm.a[2]);
+            // sum_nlm Re(w_nlm grad(R_nl Y_lm)) = rhat sum_lm Re(Q_lm Y_lm) + sum_lm Re(P_lm dY_lm) / r, with
+            // P_lm = sum_n w_nlm R_nl and Q_lm = sum_n w_nlm dR_nl: the n-sum first, then one contraction with Y and
+            // dY per neighbour instead of one per (n, l, m)
+            {
+                ACEComplex *P = force_P.get_data(), *Q = force_Q.get_data();
+                const int nlm = (lmaxi + 1) * (lmaxi + 2) / 2;
+                for (int t = 0; t < nlm; t++) P[t] = Q[t] = ACEComplex{0., 0.};
+                for (n = 0; n < nradiali; n++) {
+                    int t = 0;
+                    for (l = 0; l <= lmaxi; l++) {
+                        const DOUBLE_TYPE Rn = R_cache(jj, n, l), DRn = DR_cache(jj, n, l);
+                        for (m = 0; m <= l; m++, t++) {
+                            const ACEComplex &w = weights(mu_w, n, l, m);
+                            P[t].real += w.real * Rn;
+                            P[t].img += w.img * Rn;
+                            Q[t].real += w.real * DRn;
+                            Q[t].img += w.img * DRn;
+                        }
                     }
                 }
+                DOUBLE_TYPE rad = 0, g0 = 0, g1 = 0, g2 = 0;
+                int t = 0;
+                for (l = 0; l <= lmaxi; l++)
+                    for (m = 0; m <= l; m++, t++) {
+                        const ACEDYcomponent &D = DY_cache_jj(l, m);
+                        rad += Q[t].real_part_product(Y_cache_jj(l, m));
+                        g0 += P[t].real_part_product(D.a[0]);
+                        g1 += P[t].real_part_product(D.a[1]);
+                        g2 += P[t].real_part_product(D.a[2]);
+                    }
+                f_ji[0] += rad * r_hat[0] + g0 * inv_r_norm;
+                f_ji[1] += rad * r_hat[1] + g1 * inv_r_norm;
+                f_ji[2] += rad * r_hat[2] + g2 * inv_r_norm;
             }
-
 
 #ifdef PRINT_INTERMEDIATE_VALUES
             printf("f_ji(jj=%d, i=%d)=(%f, %f, %f)\n", jj, i,

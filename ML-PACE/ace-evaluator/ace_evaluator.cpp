@@ -322,6 +322,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
 
         basis_set->radial_functions->evaluate(r_norm, basis_set->nradbase, nradiali, mu_i, mu_j);
+        const SPECIES_TYPE mu_a = basis_set->summed_neighbour_A ? 0 : mu_j;   // A index; the radial is per bond
         basis_set->spherical_harmonics.compute_ylm(r_hat[0], r_hat[1], r_hat[2], lmaxi);
         //loop for computing A's
         //rank = 1
@@ -333,12 +334,12 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
             printf("dgr(n=%d)(r=%f) = %f\n", n, r_norm, dgr(n));
 #endif
             DG_cache(jj, n) = dgr(n);
-            A_rank1(mu_j, n) += GR * Y00;
+            A_rank1(mu_a, n) += GR * Y00;
         }
         //loop for computing A's
         // for rank > 1
         for (n = 0; n < nradiali; n++) {
-            auto &A_lm = A(mu_j, n);
+            auto &A_lm = A(mu_a, n);
             for (l = 0; l <= lmaxi; l++) {
                 R = fr(n, l);
 #ifdef DEBUG_ENERGY_CALCULATIONS
@@ -620,6 +621,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 // loop over neighbour atoms for force calculations
     for (jj = 0; jj < jnum_actual; ++jj) {
         mu_j = elements(jj);
+        const SPECIES_TYPE mu_w = basis_set->summed_neighbour_A ? 0 : mu_j;   // weights index, as mu_a
         r_hat = &rhats(jj, 0);
         inv_r_norm = inv_r_norms(jj);
 
@@ -637,11 +639,11 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
 //for rank = 1
         for (n = 0; n < nradbasei; ++n) {
-            if (weights_rank1(mu_j, n) == 0)
+            if (weights_rank1(mu_w, n) == 0)
                 continue;
             auto &DG = DG_cache(jj, n);
             DGR = DG * Y00;
-            DGR *= weights_rank1(mu_j, n);
+            DGR *= weights_rank1(mu_w, n);
 #ifdef DEBUG_FORCES_CALCULATIONS
             printf("r=1: (n,l,m)=(%d, 0, 0)\n",n+1);
             printf("\tGR(n=%d, r=%f)=%f\n",n+1,r_norm, gr(n));
@@ -660,7 +662,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
                 auto &DG = DG_cache(jj, n);
 
                 DGR = DG * Y00;
-                DGR *= weights_rank1_dB(func_ind, mu_j, n); // actually always = 0,1
+                DGR *= weights_rank1_dB(func_ind, mu_w, n); // actually always = 0,1
                 neighbours_dB(func_ind, neighbour_index_mapping(jj), 0) += DGR * r_hat[0];
                 neighbours_dB(func_ind, neighbour_index_mapping(jj), 1) += DGR * r_hat[1];
                 neighbours_dB(func_ind, neighbour_index_mapping(jj), 2) += DGR * r_hat[2];
@@ -676,7 +678,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
                 // for m>=0
                 for (m = 0; m <= l; m++) {
-                    ACEComplex w = weights(mu_j, n, l, m);
+                    ACEComplex w = weights(mu_w, n, l, m);
                     if (w == 0)
                         continue;
                     //counting for -m cases if m>0
@@ -730,7 +732,7 @@ ACECTildeEvaluator::compute_atom(int i, DOUBLE_TYPE **x, const SPECIES_TYPE *typ
 
                         for (func_ind = 0; func_ind < total_basis_size; func_ind++) {
                             //mu_j -> func_ind -- need to handle mu_j implicitly with func_ind chemical index offsets
-                            ACEComplex w_dB = weights_dB(func_ind, mu_j, n, l, m);
+                            ACEComplex w_dB = weights_dB(func_ind, mu_w, n, l, m);
                             if (w_dB == 0)
                                 continue;
                             //counting for -m cases if m>0

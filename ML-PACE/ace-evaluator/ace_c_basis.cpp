@@ -1140,6 +1140,7 @@ void ACECTildeBasisSet::save_yaml(const string &yaml_file_name) const {
     ctilde_basis_yaml["E0"].SetStyle(YAML_PACE::EmitterStyle::Flow);
 
     ctilde_basis_yaml["deltaSplineBins"] = this->deltaSplineBins;
+    if (summed_neighbour_A) ctilde_basis_yaml["summed_neighbour_A"] = true;
 
     map<int, YAML_PACE::Node> yaml_map_embedding_specifications;
     for (const auto &p: this->map_embedding_specifications)
@@ -1206,6 +1207,9 @@ void ACECTildeBasisSet::load_yaml(const string &yaml_file_name) {
         this->elements_name[mu] = elements_name_vec.at(mu);
         this->elements_to_index_map[elements_name_vec.at(mu)] = mu;
     }
+
+    if (ctilde_basis_yaml["summed_neighbour_A"])
+        summed_neighbour_A = ctilde_basis_yaml["summed_neighbour_A"].as<bool>();
 
     //reading E0vals
     auto e0_vec = ctilde_basis_yaml["E0"].as<vector<DOUBLE_TYPE >>();
@@ -1317,6 +1321,26 @@ void ACECTildeBasisSet::load_yaml(const string &yaml_file_name) {
                 radial_functions->dcut_in(mu_i, mu_j) = bondSpec.dcut_in;
                 radial_functions->inner_cutoff_type = bondSpec.inner_cutoff_type;
 
+                if (bondSpec.radbasename == "Tabulated") {
+                    // the tables replace crad . g_k (TabulatedRadial); stored in the global
+                    // (nradmax, lmax) layout, which may be wider than this bond's
+                    auto *rf = dynamic_cast<ACERadialFunctions *>(radial_functions);
+                    if (rf == nullptr)
+                        throw invalid_argument("radbasename `Tabulated` needs ACERadialFunctions");
+                    TabulatedRadial &tab = rf->tables.at(mu_i * nelements + mu_j);
+                    tab.nbins = bondSpec.radtable_nbins;
+                    tab.rcut = bondSpec.rcut;
+                    tab.gk = bondSpec.radtable_gk;
+                    tab.dgk = bondSpec.radtable_dgk;
+                    tab.rnl.assign(nradmax * (lmax + 1), {});
+                    tab.drnl.assign(nradmax * (lmax + 1), {});
+                    for (NS_TYPE n = 0; n < bondSpec.nradmax; n++)
+                        for (LS_TYPE l = 0; l <= bondSpec.lmax; l++) {
+                            tab.rnl.at(n * (lmax + 1) + l) = bondSpec.radtable_rnl.at(n * (bondSpec.lmax + 1) + l);
+                            tab.drnl.at(n * (lmax + 1) + l) = bondSpec.radtable_drnl.at(n * (bondSpec.lmax + 1) + l);
+                        }
+                    continue;
+                }
                 //setup crad
                 for (NS_TYPE n = 0; n < bondSpec.nradmax; n++)
                     for (LS_TYPE l = 0; l <= bondSpec.lmax; l++)
